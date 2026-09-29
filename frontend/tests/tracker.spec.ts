@@ -32,7 +32,7 @@ test('create problems, protect notes, record attempts, and display API errors', 
     await expect(page.getByRole('dialog')).not.toBeVisible()
     const row = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Two Sum' }) })
     await expect(row.getByRole('cell').nth(3)).toHaveText(attempt.mastery)
-    await expect(row.getByRole('cell').nth(4)).toHaveText(attempt.next)
+    await expect(row.getByRole('cell').nth(4)).toContainText(attempt.next)
     await expect(row.getByRole('cell').nth(5)).toHaveText(attempt.count)
   }
   await page.getByRole('button', { name: 'Add problem', exact: true }).click()
@@ -91,8 +91,29 @@ test('add a problem with its first attempt in one request', async ({ page }) => 
   expect(writes).toEqual(['/api/problems'])
   const row = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Climbing Stairs' }) })
   await expect(row.getByRole('cell').nth(3)).toHaveText('Learned Solution')
-  await expect(row.getByRole('cell').nth(4)).toHaveText('Sep 30, 2026')
+  await expect(row.getByRole('cell').nth(4)).toContainText('Sep 30, 2026')
   await expect(row.getByRole('cell').nth(5)).toHaveText('1')
   await page.reload()
   await expect(row.getByRole('cell').nth(5)).toHaveText('1')
+})
+
+
+test('review badges distinguish overdue, today, near and distant calendar dates', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-31T12:00:00-07:00') })
+  const dates = ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-06', '2026-11-07', null]
+  await page.route('**/api/problems/summary', route => route.fulfill({ json: dates.map((next_review, index) => ({
+    number: index + 1, name: `Example ${index + 1}`, difficulty: 'Easy', topic: 'Arrays',
+    mastery_level: next_review ? 'Partial Recall' : null, next_review, attempts: next_review ? 1 : 0, notes: '',
+  })) }))
+  await page.goto('/')
+  const badges = page.locator('.review-date')
+  for (const [index, label, tone] of [[0, '1d overdue', 'review-due'], [1, 'Due today', 'review-due'], [2, 'In 1d', 'review-soon'], [3, 'In 6d', 'review-soon'], [4, 'In 7d', 'review-later']] as const) {
+    await expect(badges.nth(index)).toContainText(label)
+    await expect(badges.nth(index)).toHaveClass(new RegExp(tone))
+  }
+  await expect(page.getByText('Not scheduled', { exact: true })).toBeVisible()
+  await page.screenshot({ path: 'test-results/review-badges.png', fullPage: true })
+  await page.clock.fastForward(24 * 60 * 60 * 1000)
+  await expect(badges.nth(1)).toContainText('1d overdue')
+  await expect(badges.nth(2)).toContainText('Due today')
 })

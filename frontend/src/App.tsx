@@ -11,6 +11,28 @@ function displayDate(value: string) {
   const [y, m, d] = value.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
+// Compare calendar dates, not elapsed local hours (which vary at daylight saving).
+function calendarDay(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return Date.UTC(year, month - 1, day) / 86400000
+}
+function ReviewDate({ value, today }: { value: string | null; today: string }) {
+  if (!value) return <span className="text-slate-400">Not scheduled</span>
+  const days = calendarDay(value) - calendarDay(today)
+  const tone = days <= 0 ? 'review-due' : days < 7 ? 'review-soon' : 'review-later'
+  const label = days < 0 ? `${-days}d overdue` : days === 0 ? 'Due today' : `In ${days}d`
+  return <span className={`review-date ${tone}`}>
+    <time dateTime={value}>{displayDate(value)}</time>
+    <span className="review-countdown">{label}</span>
+  </span>
+}
+const masteryColors: Record<string, string> = {
+  'Learned Solution': 'mastery-learned',
+  'Partial Recall': 'mastery-partial',
+  'Solved with Struggle': 'mastery-struggle',
+  'Solved Independently': 'mastery-independent',
+  'Mastered': 'mastery-mastered',
+}
 type Editor = { kind: 'problem' } | { kind: 'attempt'; problem: ProblemSummary }
 
 function EntryDialog({ editor, onClose, onSaved }: { editor: Editor; onClose: () => void; onSaved: () => void }) {
@@ -86,6 +108,13 @@ function EntryDialog({ editor, onClose, onSaved }: { editor: Editor; onClose: ()
 }
 
 export default function App() {
+  const [today, setToday] = useState(localToday)
+  useEffect(() => {
+    const update = () => setToday(localToday())
+    const timer = window.setInterval(update, 30000)
+    window.addEventListener('focus', update)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', update) }
+  }, [])
   const [problems, setProblems] = useState<ProblemSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -121,7 +150,7 @@ export default function App() {
     <section aria-labelledby="table-title" className="table-card">
       <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b border-slate-100">
         <div className="flex items-center gap-3"><h2 id="table-title" className="font-semibold">Your problems</h2><span className="count">{problems.length}</span></div>
-        <button className="text-button" onClick={() => void refresh()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+        <button className="text-button" onClick={() => { setNotice(''); void refresh() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
       </div>
       {notice && <p role="status" className="px-6 pt-4 text-sm text-emerald-700">{notice}</p>}
       {error && <div role="alert" className="error m-5">{error} {problems.length > 0 && 'Showing the last loaded data.'} <button className="underline font-semibold" onClick={() => void refresh()}>Try again</button></div>}
@@ -135,8 +164,8 @@ export default function App() {
             <tbody>{problems.map(problem => <Fragment key={problem.number}><tr>
               <td className="text-slate-400 font-mono">{problem.number}</td><th scope="row" className="problem-name">{problem.name}</th>
               <td><span className={`badge ${problem.difficulty.toLowerCase()}`}>{problem.difficulty}</span></td><td className="text-slate-500">{problem.topic}</td>
-              <td><span className={problem.mastery_level ? 'text-slate-600' : 'text-slate-400'}>{problem.mastery_level ?? 'Not reviewed'}</span></td>
-              <td className="whitespace-nowrap text-slate-600">{problem.next_review ? displayDate(problem.next_review) : <span className="text-slate-400">Not scheduled</span>}</td>
+              <td><span className={problem.mastery_level ? `mastery-badge ${masteryColors[problem.mastery_level] ?? ''}` : 'text-slate-400'}>{problem.mastery_level ?? 'Not reviewed'}</span></td>
+              <td className="whitespace-nowrap text-slate-600"><ReviewDate value={problem.next_review} today={today} /></td>
               <td className="font-mono">{problem.attempts}</td>
               <td>{problem.notes ? <button className="text-button whitespace-nowrap" aria-expanded={visibleNotes.has(problem.number)} aria-controls={`notes-${problem.number}`} onClick={() => toggleNotes(problem.number)}>{visibleNotes.has(problem.number) ? 'Hide notes' : 'Show notes'}</button> : <span className="text-slate-400">No notes</span>}</td>
               <td><button className="row-button" onClick={() => setEditor({ kind: 'attempt', problem })} aria-label={`Record attempt for ${problem.name}`}>Record attempt</button></td>

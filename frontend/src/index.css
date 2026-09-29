@@ -31,5 +31,17 @@
   .easy { @apply bg-emerald-50 text-emerald-700; }
   .medium { @apply bg-amber-50 text-amber-700; }
   .hard { @apply bg-rose-50 text-rose-700; }
+  .review-date { @apply inline-grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border px-3 py-2; min-width: 220px; }
+  .review-date time { @apply text-xs tabular-nums; }
+  .review-countdown { @apply border-l pl-3 text-center text-[11px] font-semibold tabular-nums; border-color: currentColor; min-width: 76px; }
+  .mastery-badge { @apply inline-flex items-center whitespace-nowrap rounded-md px-2.5 py-1.5 text-[11px] font-medium; }
+  .mastery-learned { @apply bg-rose-50 text-rose-700; }
+  .mastery-partial { @apply bg-yellow-50 text-yellow-800; }
+  .mastery-struggle { @apply bg-orange-50 text-orange-800; }
+  .mastery-independent { @apply bg-emerald-50 text-emerald-700; }
+  .mastery-mastered { @apply bg-blue-50 text-blue-700; }
+  .review-due { @apply border-rose-200 bg-rose-50 text-rose-700; }
+  .review-soon { @apply border-amber-200 bg-amber-50 text-amber-800; }
+  .review-later { @apply border-emerald-200 bg-emerald-50 text-emerald-700; }
   .notes-cell { @apply bg-indigo-50/40 px-8 py-5 text-slate-600; }
 }
