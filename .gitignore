@@ -1,8 +1,14 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-check/
 .env
 .DS_Store
 .pytest_cache/
 tracker.db
-.venv-check/
+
+# Environment artifacts currently in the project root
+/bin/
+/include/
+/lib/
+/pyvenv.cfg

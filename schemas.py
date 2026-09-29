@@ -33,3 +33,13 @@ class ProblemCreate(BaseModel):
             raise ValueError("Must not be blank")
         return cleaned
     
+class ProblemSummary(BaseModel):
+    number: int 
+    name: str
+    difficulty: str
+    topic: str
+    mastery_level: str | None
+    next_review: date | None
+    attempts: int
+    notes: str
+    

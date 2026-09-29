@@ -7,8 +7,9 @@ from storage import get_all_problems, get_all_reviews, save_review, save_problem
 from datetime import date
 from tracker import get_due_problems
 
-from schemas import ReviewCreate, ProblemCreate
+from schemas import ReviewCreate, ProblemCreate, ProblemSummary
 from contextlib import asynccontextmanager
+from summaries import build_problem_summary
 
 import sqlite3
 
@@ -81,3 +82,15 @@ def create_problem(submission: ProblemCreate) -> Problem:
         raise
     
     return problem
+
+@app.get("/problems/summary", response_model=list[ProblemSummary])
+def list_problem_summaries() -> list[ProblemSummary]:
+    problems = get_all_problems(DATABASE_PATH)
+    reviews = get_all_reviews(DATABASE_PATH)
+    list_of_problem_summary = []
+    
+    for problem in problems:
+        problem_summary = build_problem_summary(problem, reviews)
+        list_of_problem_summary.append(problem_summary)
+        
+    return list_of_problem_summary
