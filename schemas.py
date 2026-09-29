@@ -6,8 +6,7 @@ from scheduler import REVIEW_INTERVALS
 
 from typing import Literal
 
-class ReviewCreate(BaseModel):
-    problem_number: int = Field(gt=0)
+class AttemptCreate(BaseModel):
     reviewed_on: date
     mastery_level: str
 
@@ -18,12 +17,16 @@ class ReviewCreate(BaseModel):
             raise ValueError(f"Invalid mastery level: {value}")
         return value
 
+class ReviewCreate(AttemptCreate):
+    problem_number: int = Field(gt=0)
+
 class ProblemCreate(BaseModel):
     number : int = Field(gt=0)
     name : str = Field(min_length=1)
     difficulty : Literal["Easy", "Medium", "Hard"]
     topic : str = Field(min_length=1)
     notes : str = ""
+    first_attempt: AttemptCreate | None = None
     
     @field_validator("name", "topic")
     @classmethod

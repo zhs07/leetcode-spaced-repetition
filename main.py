@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 
 from models import Problem, Review
-from storage import get_all_problems, get_all_reviews, save_review, save_problem, initialize_database
+from storage import get_all_problems, get_all_reviews, save_review, save_problem_with_first_attempt, initialize_database
 from datetime import date
 from tracker import get_due_problems
 
@@ -70,8 +70,15 @@ def create_problem(submission: ProblemCreate) -> Problem:
                       topic=submission.topic,
                       notes=submission.notes)
     
+    first_attempt = None
+    
+    if submission.first_attempt is not None:
+        first_attempt = Review(problem_number=problem.number,
+                               reviewed_on=submission.first_attempt.reviewed_on,
+                               mastery_level=submission.first_attempt.mastery_level)
+    
     try:
-        save_problem(DATABASE_PATH, problem)
+        save_problem_with_first_attempt(DATABASE_PATH, problem, first_attempt)
         
     except sqlite3.IntegrityError as error:
         if error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY:

@@ -16,6 +16,7 @@ type Editor = { kind: 'problem' } | { kind: 'attempt'; problem: ProblemSummary }
 function EntryDialog({ editor, onClose, onSaved }: { editor: Editor; onClose: () => void; onSaved: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [saving, setSaving] = useState(false)
+  const [includeFirstAttempt, setIncludeFirstAttempt] = useState(true)
   const [error, setError] = useState('')
   useEffect(() => {
     const element = dialog.current!
@@ -31,7 +32,9 @@ function EntryDialog({ editor, onClose, onSaved }: { editor: Editor; onClose: ()
     setError('')
     try {
       if (editor.kind === 'problem') {
-        await request('/problems', { number: Number(value('number')), name: value('name').trim(), difficulty: value('difficulty'), topic: value('topic').trim(), notes: value('notes') })
+        await request('/problems', { number: Number(value('number')), name: value('name').trim(), difficulty: value('difficulty'), topic: value('topic').trim(), notes: value('notes'),
+          ...(includeFirstAttempt ? { first_attempt: { reviewed_on: value('reviewed_on'), mastery_level: value('mastery_level') } } : {}),
+        })
       } else {
         await request('/reviews', { problem_number: editor.problem.number, reviewed_on: value('reviewed_on'), mastery_level: value('mastery_level') })
       }
@@ -59,8 +62,16 @@ function EntryDialog({ editor, onClose, onSaved }: { editor: Editor; onClose: ()
           <label>Topic<input name="topic" required pattern=".*\S.*" placeholder="e.g. Arrays & Hashing" /></label>
           <label>Notes <span className="font-normal text-slate-400">(optional)</span><textarea name="notes" rows={3} placeholder="Your approach, insights, or a reminder…" /></label>
           <p className="text-sm text-slate-500">Notes stay hidden until you choose to reveal them.</p>
-        </> : <>
-          <label>Completion date<input type="date" name="reviewed_on" defaultValue={localToday()} required autoFocus /></label>
+          <div className="border-t border-slate-100 pt-4">
+            <label className="flex items-center gap-3">
+              <input type="checkbox" className="m-0 h-4 w-4 accent-indigo-600" checked={includeFirstAttempt} onChange={event => setIncludeFirstAttempt(event.target.checked)} aria-describedby="first-attempt-help" />
+              Record my first attempt
+            </label>
+            <p id="first-attempt-help" className="mt-2 text-sm text-slate-500">Uncheck to save this problem for later without recording an attempt.</p>
+          </div>
+        </> : null}
+        {(editor.kind === 'attempt' || includeFirstAttempt) && <>
+          <label>Completion date<input type="date" name="reviewed_on" defaultValue={localToday()} required autoFocus={editor.kind === 'attempt'} /></label>
           <label>Mastery level<select name="mastery_level" required defaultValue=""><option value="" disabled>How did this attempt go?</option>{masteryLevels.map(level => <option key={level}>{level}</option>)}</select></label>
           <p className="text-sm leading-6 text-slate-500">Choose based on this attempt. Your next review is scheduled from its completion date.</p>
         </>}
@@ -117,7 +128,7 @@ export default function App() {
       {loading && problems.length === 0 ? <p role="status" className="empty-state">Loading your practice history…</p> :
         problems.length === 0 && !error ? <div className="empty-state">
           <div className="empty-icon" aria-hidden="true">&lt;/&gt;</div><h3 className="text-xl font-semibold text-slate-800 mt-5">A fresh start for your practice</h3>
-          <p className="mt-2">Add your first problem, then record an attempt to schedule its next review.</p>
+          <p className="mt-2">Add a problem with your first attempt, or save it to practice later.</p>
           <button className="text-button mt-5" onClick={() => setEditor({ kind: 'problem' })}>Add your first problem →</button>
         </div> : problems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
           <table><thead><tr>{['Number', 'Name', 'Difficulty', 'Topic', 'Mastery Level', 'Next review', 'Attempts', 'Notes', 'Action'].map(title => <th key={title} scope="col">{title}</th>)}</tr></thead>

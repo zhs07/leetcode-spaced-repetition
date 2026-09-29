@@ -121,3 +121,48 @@ def get_all_reviews(database_path: str, ) -> list[Review]:
         reviews.append(review)
 
     return reviews
+
+
+def save_problem_with_first_attempt(
+    database_path: str,
+    problem: Problem,
+    first_attempt: Review | None = None,
+) -> None:
+    if first_attempt is not None and first_attempt.problem_number != problem.number:
+        raise ValueError
+
+    connection = get_connection(database_path)
+    
+    try:
+        connection.execute(
+            """
+            INSERT INTO problems (number, name, difficulty, topic, notes)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                problem.number,
+                problem.name,
+                problem.difficulty,
+                problem.topic,
+                problem.notes,
+            )   
+        )
+        if first_attempt is not None:
+            connection.execute(
+                    """
+                    INSERT INTO reviews (problem_number, reviewed_on, mastery_level)
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        first_attempt.problem_number,
+                        first_attempt.reviewed_on.isoformat(),
+                        first_attempt.mastery_level,
+            
+                    ),
+                )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
