@@ -11,9 +11,9 @@ and create a tool I will use for reviewing LeetCode problems.
 - Problems and reviews are now stored in SQLite
 - The Api can create problems, record attempts, and retrieve due problems
 - Request validation and automated tests exist
+- React interface for adding problems, recording attempts, and viewing summaries with hidden notes
 
 ## Planned functionality
-- Build a web interface for managing problems and recording reviews.
 - Randomly select a due problem, with options to hide its topic,
   name, and difficulty + from specific curated list if user want(nc 250/150, blind 75/grind 75 etc.)
 - Support archiving and restoring problems.
@@ -45,3 +45,17 @@ With the virtual environment active:
 ```bash
 python -m pytest
 ```
+## Frontend development
+
+Requires Node.js 24 LTS and npm. Keep FastAPI running in one terminal.
+In a second terminal, from the repository root:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open the URL Vite prints (normally http://127.0.0.1:5173).
+The frontend forwards `/api` requests to FastAPI at http://127.0.0.1:8000.
+See [frontend/README.md](frontend/README.md) for the data flow and browser tests.

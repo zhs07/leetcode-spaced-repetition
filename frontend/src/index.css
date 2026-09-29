@@ -1,0 +1,35 @@
+@import "tailwindcss";
+@layer base {
+  body { margin: 0; background: #f8f9fc; color: #25324a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  button { cursor: pointer; transition: background-color 150ms, color 150ms; }
+  button:disabled { cursor: wait; opacity: .6; }
+  :focus-visible { outline: 3px solid #a5b4fc; outline-offset: 3px; }
+  label { display: block; font-size: 14px; font-weight: 500; }
+  input, select, textarea { display: block; width: 100%; margin-top: 7px; border: 1px solid #dce1ea; border-radius: 9px; padding: 10px 12px; background: white; font: inherit; font-weight: 400; }
+  textarea { resize: vertical; }
+  dialog { margin: auto; width: min(520px, calc(100% - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 24px 80px #0f172a26; }
+  dialog::backdrop { background: #0f172a66; backdrop-filter: blur(3px); }
+  table { width: 100%; text-align: left; font-size: 13px; border-collapse: collapse; }
+  thead th { background: #fbfcfe; color: #7a8598; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; padding: 15px 18px; }
+  tbody td, tbody th { padding: 21px 18px; border-top: 1px solid #edf0f5; }
+  tbody tr:hover { background: #fcfcff; }
+}
+@layer components {
+  .eyebrow { @apply text-[10px] uppercase tracking-[0.18em] font-semibold text-slate-400; }
+  .primary { @apply rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700; }
+  .secondary { @apply rounded-lg border border-slate-200 px-4 py-2.5 text-sm hover:bg-slate-50; }
+  .icon-button { @apply rounded-lg px-2 text-2xl leading-8 text-slate-400 hover:bg-slate-100; }
+  .text-button { @apply text-xs font-medium text-indigo-600 hover:text-indigo-800; }
+  .row-button { @apply rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium whitespace-nowrap hover:border-indigo-300 hover:text-indigo-700; }
+  .table-card { @apply overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm; }
+  .count { @apply rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500; }
+  .empty-state { @apply px-6 py-20 text-center text-sm text-slate-500; }
+  .empty-icon { @apply mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 font-mono text-xl text-indigo-500; }
+  .error { @apply rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700; }
+  .problem-name { @apply min-w-40 font-semibold text-slate-800; }
+  .badge { @apply inline-block rounded-md px-2 py-1 text-[11px] font-medium; }
+  .easy { @apply bg-emerald-50 text-emerald-700; }
+  .medium { @apply bg-amber-50 text-amber-700; }
+  .hard { @apply bg-rose-50 text-rose-700; }
+  .notes-cell { @apply bg-indigo-50/40 px-8 py-5 text-slate-600; }
+}
