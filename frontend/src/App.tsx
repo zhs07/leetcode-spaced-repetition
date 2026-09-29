@@ -121,6 +121,33 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [editor, setEditor] = useState<Editor | null>(null)
   const [visibleNotes, setVisibleNotes] = useState<Set<number>>(new Set())
+  const [view, setView] = useState('all')
+  const [topic, setTopic] = useState('')
+  const [mastery, setMastery] = useState('')
+  const [sortBy, setSortBy] = useState('next_review')
+  const [direction, setDirection] = useState('asc')
+  const topics = [...new Set(problems.map(problem => problem.topic))].sort((a, b) => a.localeCompare(b))
+  const shownProblems = problems.filter(problem =>
+    (view === 'all' || (view === 'due' ? problem.next_review !== null && problem.next_review <= today : problem.mastery_level === null)) &&
+    (!topic || problem.topic === topic) && (!mastery || problem.mastery_level === mastery)
+  ).sort((a, b) => {
+    const value = (problem: ProblemSummary): string | number | null => {
+      switch (sortBy) {
+        case 'attempts': return problem.attempts
+        case 'difficulty': return ['Easy', 'Medium', 'Hard'].indexOf(problem.difficulty)
+        case 'mastery': return problem.mastery_level === null ? null : masteryLevels.indexOf(problem.mastery_level)
+        case 'topic': return problem.topic
+        default: return problem.next_review
+      }
+    }
+    const left = value(a), right = value(b)
+    // Keep unscheduled/unreviewed entries last in either direction.
+    if (left === null) return right === null ? a.number - b.number : 1
+    if (right === null) return -1
+    const comparison = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right))
+    return comparison * (direction === 'asc' ? 1 : -1) || a.number - b.number
+  })
+  function clearFilters() { setView('all'); setTopic(''); setMastery('') }
   const latestRequest = useRef(0)
   async function refresh() {
     const id = ++latestRequest.current
@@ -152,6 +179,19 @@ export default function App() {
         <div className="flex items-center gap-3"><h2 id="table-title" className="font-semibold">Your problems</h2><span className="count">{problems.length}</span></div>
         <button className="text-button" onClick={() => { setNotice(''); void refresh() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
       </div>
+      <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="text-xs text-slate-500">Show<select value={view} onChange={event => setView(event.target.value)}><option value="all">All problems</option><option value="due">Due & overdue</option><option value="unreviewed">Not reviewed</option></select></label>
+          <label className="text-xs text-slate-500">Filter by topic<select value={topic} onChange={event => setTopic(event.target.value)}><option value="">All topics</option>{topics.map(item => <option key={item}>{item}</option>)}</select></label>
+          <label className="text-xs text-slate-500">Filter by mastery<select value={mastery} onChange={event => setMastery(event.target.value)}><option value="">All mastery levels</option>{masteryLevels.map(item => <option key={item}>{item}</option>)}</select></label>
+          <label className="text-xs text-slate-500">Sort by<select value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="next_review">Next review</option><option value="attempts">Attempts</option><option value="difficulty">Difficulty</option><option value="mastery">Mastery level</option><option value="topic">Topic</option></select></label>
+          <label className="text-xs text-slate-500">Direction<select value={direction} onChange={event => setDirection(event.target.value)}><option value="asc">Ascending ↑</option><option value="desc">Descending ↓</option></select></label>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-slate-500" role="status">Showing {shownProblems.length} of {problems.length} problems</p>
+          {(view !== 'all' || topic || mastery) && <button className="text-button" onClick={clearFilters}>Clear filters</button>}
+        </div>
+      </div>
       {notice && <p role="status" className="px-6 pt-4 text-sm text-emerald-700">{notice}</p>}
       {error && <div role="alert" className="error m-5">{error} {problems.length > 0 && 'Showing the last loaded data.'} <button className="underline font-semibold" onClick={() => void refresh()}>Try again</button></div>}
       {loading && problems.length === 0 ? <p role="status" className="empty-state">Loading your practice history…</p> :
@@ -159,9 +199,9 @@ export default function App() {
           <div className="empty-icon" aria-hidden="true">&lt;/&gt;</div><h3 className="text-xl font-semibold text-slate-800 mt-5">A fresh start for your practice</h3>
           <p className="mt-2">Add a problem with your first attempt, or save it to practice later.</p>
           <button className="text-button mt-5" onClick={() => setEditor({ kind: 'problem' })}>Add your first problem →</button>
-        </div> : problems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
+        </div> : problems.length > 0 && shownProblems.length === 0 ? <div className="empty-state"><h3 className="text-lg font-semibold text-slate-700">No matching problems</h3><p className="mt-2">Try another filter combination to see more of your list.</p><button className="text-button mt-4" onClick={clearFilters}>Show all problems</button></div> : problems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
           <table><thead><tr>{['Number', 'Name', 'Difficulty', 'Topic', 'Mastery Level', 'Next review', 'Attempts', 'Notes', 'Action'].map(title => <th key={title} scope="col">{title}</th>)}</tr></thead>
-            <tbody>{problems.map(problem => <Fragment key={problem.number}><tr>
+            <tbody>{shownProblems.map(problem => <Fragment key={problem.number}><tr>
               <td className="text-slate-400 font-mono">{problem.number}</td><th scope="row" className="problem-name">{problem.name}</th>
               <td><span className={`badge ${problem.difficulty.toLowerCase()}`}>{problem.difficulty}</span></td><td className="text-slate-500">{problem.topic}</td>
               <td><span className={problem.mastery_level ? `mastery-badge ${masteryColors[problem.mastery_level] ?? ''}` : 'text-slate-400'}>{problem.mastery_level ?? 'Not reviewed'}</span></td>

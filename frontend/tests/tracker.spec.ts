@@ -10,10 +10,10 @@ test('create problems, protect notes, record attempts, and display API errors', 
   await page.getByLabel('Notes').fill('Use a hashmap to remember complements.')
   await expect(page.getByRole('checkbox', { name: 'Record my first attempt' })).toBeChecked()
   await page.getByRole('checkbox', { name: 'Record my first attempt' }).uncheck()
-  await expect(page.getByLabel('Mastery level')).not.toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Mastery level', exact: true })).not.toBeVisible()
   await page.getByRole('button', { name: 'Add problem', exact: true }).last().click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
-  await expect(page.getByText('Not reviewed', { exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Not reviewed', exact: true })).toBeVisible()
   await expect(page.getByText('Not scheduled', { exact: true })).toBeVisible()
   await expect(page.getByText('Use a hashmap to remember complements.')).not.toBeVisible()
   await page.getByRole('button', { name: 'Show notes' }).click()
@@ -27,7 +27,7 @@ test('create problems, protect notes, record attempts, and display API errors', 
   ]) {
     await page.getByRole('button', { name: 'Record attempt for Two Sum' }).click()
     await page.getByLabel('Completion date').fill(attempt.date)
-    await page.getByLabel('Mastery level').selectOption(attempt.mastery)
+    await page.getByRole('combobox', { name: 'Mastery level', exact: true }).selectOption(attempt.mastery)
     await page.getByRole('button', { name: 'Save attempt' }).click()
     await expect(page.getByRole('dialog')).not.toBeVisible()
     const row = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Two Sum' }) })
@@ -49,8 +49,8 @@ test('create problems, protect notes, record attempts, and display API errors', 
   await page.getByRole('button', { name: 'Add problem', exact: true }).last().click()
   await expect(page.getByRole('rowheader', { name: 'Reverse Linked List' })).toBeVisible()
   await page.reload()
-  await expect(page.getByText('Partial Recall')).toBeVisible()
-  await expect(page.getByText('Not reviewed')).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Partial Recall', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Not reviewed', exact: true })).toBeVisible()
   await page.screenshot({ path: 'test-results/desktop.png', fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByRole('button', { name: 'Add problem', exact: true })).toBeVisible()
@@ -80,12 +80,12 @@ test('add a problem with its first attempt in one request', async ({ page }) => 
   await page.getByLabel('Name', { exact: true }).fill('Climbing Stairs')
   await page.getByLabel('Topic', { exact: true }).fill('Dynamic Programming')
   await expect(page.getByRole('checkbox', { name: 'Record my first attempt' })).toBeChecked()
-  await expect(page.getByLabel('Mastery level')).toHaveValue('')
+  await expect(page.getByRole('combobox', { name: 'Mastery level', exact: true })).toHaveValue('')
   await page.getByRole('button', { name: 'Add problem', exact: true }).last().click()
   await expect(page.getByRole('dialog')).toBeVisible()
   expect(writes).toEqual([])
   await page.getByLabel('Completion date').fill('2026-09-29')
-  await page.getByLabel('Mastery level').selectOption('Learned Solution')
+  await page.getByRole('combobox', { name: 'Mastery level', exact: true }).selectOption('Learned Solution')
   await page.getByRole('button', { name: 'Add problem', exact: true }).last().click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
   expect(writes).toEqual(['/api/problems'])
@@ -116,4 +116,50 @@ test('review badges distinguish overdue, today, near and distant calendar dates'
   await page.clock.fastForward(24 * 60 * 60 * 1000)
   await expect(badges.nth(1)).toContainText('1d overdue')
   await expect(badges.nth(2)).toContainText('Due today')
+})
+
+test('filters combine and all sort directions preserve missing values last', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-31T12:00:00-07:00') })
+  const summaries = [
+    { number: 1, name: 'Alpha', topic: 'Trees', difficulty: 'Hard', mastery_level: 'Mastered', next_review: '2026-11-07', attempts: 10, notes: '' },
+    { number: 2, name: 'Beta', topic: 'Arrays', difficulty: 'Easy', mastery_level: 'Learned Solution', next_review: '2026-10-30', attempts: 2, notes: '' },
+    { number: 3, name: 'Gamma', topic: 'Graphs', difficulty: 'Medium', mastery_level: 'Partial Recall', next_review: '2026-10-31', attempts: 3, notes: '' },
+    { number: 4, name: 'Delta', topic: 'Arrays', difficulty: 'Easy', mastery_level: null, next_review: null, attempts: 0, notes: '' },
+  ]
+  let loads = 0
+  await page.route('**/api/problems/summary', route => { loads++; return route.fulfill({ json: summaries }) })
+  await page.goto('/')
+  const rows = page.getByRole('rowheader')
+  await expect(rows).toHaveText(['Beta', 'Gamma', 'Alpha', 'Delta'])
+  const initialLoads = loads
+  for (const [sort, asc, desc] of [
+    ['next_review', ['Beta', 'Gamma', 'Alpha', 'Delta'], ['Alpha', 'Gamma', 'Beta', 'Delta']],
+    ['mastery', ['Beta', 'Gamma', 'Alpha', 'Delta'], ['Alpha', 'Gamma', 'Beta', 'Delta']],
+    ['attempts', ['Delta', 'Beta', 'Gamma', 'Alpha'], ['Alpha', 'Gamma', 'Beta', 'Delta']],
+    ['difficulty', ['Beta', 'Delta', 'Gamma', 'Alpha'], ['Alpha', 'Gamma', 'Beta', 'Delta']],
+    ['topic', ['Beta', 'Delta', 'Gamma', 'Alpha'], ['Alpha', 'Gamma', 'Beta', 'Delta']],
+  ] as const) {
+    await page.getByRole('combobox', { name: 'Sort by', exact: true }).selectOption(sort)
+    await page.getByRole('combobox', { name: 'Direction', exact: true }).selectOption('asc')
+    await expect(rows).toHaveText([...asc])
+    await page.getByRole('combobox', { name: 'Direction', exact: true }).selectOption('desc')
+    await expect(rows).toHaveText([...desc])
+  }
+  await page.getByRole('combobox', { name: 'Show', exact: true }).selectOption('due')
+  await expect(rows).toHaveText(['Gamma', 'Beta'])
+  await page.getByRole('combobox', { name: 'Filter by topic', exact: true }).selectOption('Arrays')
+  await expect(rows).toHaveText(['Beta'])
+  await page.getByRole('combobox', { name: 'Filter by mastery', exact: true }).selectOption('Mastered')
+  await expect(page.getByText('No matching problems')).toBeVisible()
+  await expect(page.getByText('Showing 0 of 4 problems')).toBeVisible()
+  await page.getByRole('button', { name: 'Clear filters' }).click()
+  await page.getByRole('combobox', { name: 'Show', exact: true }).selectOption('unreviewed')
+  await expect(rows).toHaveText(['Delta'])
+  await page.getByRole('button', { name: 'Clear filters' }).click()
+  await expect(rows).toHaveCount(4)
+  expect(loads).toBe(initialLoads)
+  await page.screenshot({ path: 'test-results/filter-toolbar.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await expect(page.getByRole('combobox', { name: 'Direction', exact: true })).toBeVisible()
 })
