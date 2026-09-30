@@ -205,3 +205,42 @@ def test_post_problem_with_first_attempt(tmp_path, monkeypatch):
             "attempts": 1,
         }
     ]
+    
+def test_delete_problem_removes_problem_and_reviews(tmp_path, monkeypatch):
+    database_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(main, "DATABASE_PATH", database_path)
+
+    with TestClient(main.app) as client:
+        problem = Problem(
+            number=1,
+            name="Two Sum",
+            difficulty="Easy",
+            topic="Arrays & Hashing",
+            notes="",
+        )
+        review = Review(
+            problem_number=1,
+            reviewed_on=date(2026, 9, 29),
+            mastery_level="Partial Recall",
+        )
+
+        save_problem(database_path, problem)
+        save_review(database_path, review)
+
+        response = client.delete("/problems/1")
+
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted" : True}
+    assert get_all_reviews(database_path) == []
+    assert get_all_problems(database_path) == []
+    
+def test_delete_missing_problem_returns_404(tmp_path, monkeypatch):
+    database_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(main, "DATABASE_PATH", database_path)
+
+    with TestClient(main.app) as client:
+        response = client.delete("/problems/999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Problem not found"}
