@@ -166,3 +166,28 @@ def save_problem_with_first_attempt(
         raise
     finally:
         connection.close()
+        
+def delete_problem(database_path: str, problem_number: int) -> bool:
+    connection = get_connection(database_path)
+
+    try:
+        connection.execute(
+            "DELETE FROM reviews WHERE problem_number = ?",
+            (problem_number,),            
+            
+        )
+        cursor = connection.execute(
+            "DELETE FROM problems WHERE number = ?",
+            (problem_number,),
+        )
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+        
+    return cursor.rowcount == 1
