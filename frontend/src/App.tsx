@@ -107,6 +107,37 @@ function EntryDialog({ editor, onClose, onSaved }: { editor: Editor; onClose: ()
   </dialog>
 }
 
+function DeleteDialog({ problem, onClose, onDeleted }: { problem: ProblemSummary; onClose: () => void; onDeleted: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    const element = dialog.current!
+    element.showModal()
+    return () => element.close()
+  }, [])
+  async function remove() {
+    if (deleting) return
+    setDeleting(true); setError('')
+    try {
+      await request(`/problems/${problem.number}`, undefined, 'DELETE')
+      onDeleted()
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not delete. Please try again.')
+      setDeleting(false)
+    }
+  }
+  return <dialog ref={dialog} aria-labelledby="delete-title" aria-describedby="delete-description" onCancel={event => { event.preventDefault(); if (!deleting) onClose() }}>
+    <h2 id="delete-title" className="text-2xl font-semibold">Delete problem?</h2>
+    <p id="delete-description" className="mt-4 text-sm leading-6 text-slate-600">Delete #{problem.number} {problem.name} and its {problem.attempts} recorded {problem.attempts === 1 ? 'attempt' : 'attempts'}? This cannot be undone.</p>
+    {error && <p role="alert" className="error mt-4">{error}</p>}
+    <div className="flex justify-end gap-3 mt-6">
+      <button className="secondary" autoFocus disabled={deleting} onClick={onClose}>Cancel</button>
+      <button className="danger" disabled={deleting} onClick={() => void remove()}>{deleting ? 'Deleting…' : 'Delete problem'}</button>
+    </div>
+  </dialog>
+}
+
 export default function App() {
   const [today, setToday] = useState(localToday)
   useEffect(() => {
@@ -119,6 +150,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<ProblemSummary | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [visibleNotes, setVisibleNotes] = useState<Set<number>>(new Set())
   const [view, setView] = useState('all')
@@ -208,12 +240,21 @@ export default function App() {
               <td className="whitespace-nowrap text-slate-600"><ReviewDate value={problem.next_review} today={today} /></td>
               <td className="font-mono">{problem.attempts}</td>
               <td>{problem.notes ? <button className="text-button whitespace-nowrap" aria-expanded={visibleNotes.has(problem.number)} aria-controls={`notes-${problem.number}`} onClick={() => toggleNotes(problem.number)}>{visibleNotes.has(problem.number) ? 'Hide notes' : 'Show notes'}</button> : <span className="text-slate-400">No notes</span>}</td>
-              <td><button className="row-button" onClick={() => setEditor({ kind: 'attempt', problem })} aria-label={`Record attempt for ${problem.name}`}>Record attempt</button></td>
+              <td><div className="flex flex-col items-start gap-2"><button className="row-button" onClick={() => setEditor({ kind: 'attempt', problem })} aria-label={`Record attempt for ${problem.name}`}>Record attempt</button><button className="delete-link" aria-label={`Delete ${problem.name}`} onClick={() => { setNotice(''); setDeleteTarget(problem) }}>Delete</button></div></td>
             </tr>{visibleNotes.has(problem.number) && <tr id={`notes-${problem.number}`}><td colSpan={9} className="notes-cell"><p className="eyebrow mb-2">Your notes · {problem.name}</p><p className="whitespace-pre-wrap break-words max-w-3xl">{problem.notes}</p></td></tr>}</Fragment>)}</tbody>
           </table>
         </div>}
     </section>
     <p className="mt-5 text-center text-xs text-slate-400">Recall changes. Every attempt is a new starting point.</p>
+    {deleteTarget && <DeleteDialog problem={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={() => {
+      const remaining = problems.filter(problem => problem.number !== deleteTarget.number)
+      setProblems(remaining)
+      setVisibleNotes(previous => { const next = new Set(previous); next.delete(deleteTarget.number); return next })
+      if (topic && !remaining.some(problem => problem.topic === topic)) setTopic('')
+      setNotice(`#${deleteTarget.number} ${deleteTarget.name} deleted.`)
+      setDeleteTarget(null)
+      void refresh()
+    }} />}
     {editor && <EntryDialog editor={editor} onClose={() => setEditor(null)} onSaved={() => {
       setNotice(editor.kind === 'problem' ? 'Problem added.' : 'Attempt recorded.'); setEditor(null); void refresh()
     }} />}

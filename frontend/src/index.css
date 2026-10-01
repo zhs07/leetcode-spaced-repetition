@@ -17,6 +17,8 @@
 @layer components {
   .eyebrow { @apply text-[10px] uppercase tracking-[0.18em] font-semibold text-slate-400; }
   .primary { @apply rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700; }
+  .danger { @apply rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-red-700; }
+  .delete-link { @apply rounded px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-800; }
   .secondary { @apply rounded-lg border border-slate-200 px-4 py-2.5 text-sm hover:bg-slate-50; }
   .icon-button { @apply rounded-lg px-2 text-2xl leading-8 text-slate-400 hover:bg-slate-100; }
   .text-button { @apply text-xs font-medium text-indigo-600 hover:text-indigo-800; }
