@@ -204,6 +204,7 @@ def test_post_problem_with_first_attempt(tmp_path, monkeypatch):
             "mastery_level": "Partial Recall",
             "notes": "",
             "attempts": 1,
+            "archived": False
         }
     ]
     

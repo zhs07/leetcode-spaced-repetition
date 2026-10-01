@@ -26,6 +26,8 @@ def get_due_problems(problems: list[Problem], reviews: list[Review], today: date
     due = []
     
     for problem in problems:
+        if problem.archived:
+            continue
         latest_review = get_latest_review(reviews, problem.number)
         if latest_review is not None:
             next_review = calculate_next_review(latest_review.reviewed_on, latest_review.mastery_level)

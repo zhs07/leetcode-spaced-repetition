@@ -45,4 +45,5 @@ class ProblemSummary(BaseModel):
     next_review: date | None
     attempts: int
     notes: str
+    archived: bool
     

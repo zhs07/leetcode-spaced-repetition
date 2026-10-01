@@ -102,8 +102,29 @@ def test_get_due_problems_includes_due_today_and_overdue():
     res = get_due_problems(problems, reviews, today)
     assert res == [problems[0], problems[1]]
     
-    
-    
-    
-    
-    
+def test_due_problems_excludes_archived_problems():
+    today = date(2026, 9, 30)
+
+    active = Problem(
+        number=1,
+        name="Two Sum",
+        difficulty="Easy",
+        topic="Arrays & Hashing",
+        notes="",
+    )
+    archived = Problem(
+        number=217,
+        name="Contains Duplicate",
+        difficulty="Easy",
+        topic="Arrays & Hashing",
+        notes="",
+        archived=True,
+    )
+    reviews = [
+        Review(1, date(2026, 9, 1), "Solved Independently"),
+        Review(217, date(2026, 9, 1), "Solved Independently"),
+    ]
+
+    res = get_due_problems([active, archived], reviews, today)
+
+    assert res == [active]

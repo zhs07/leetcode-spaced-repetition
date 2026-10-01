@@ -17,6 +17,8 @@ def build_problem_summary(problem: Problem, reviews: list[Review]) -> ProblemSum
         next_review = calculate_next_review(
             most_recent_review.reviewed_on, most_recent_review.mastery_level
         )
+        if problem.archived == True:
+            next_review = None
         res = ProblemSummary(
             number=problem.number,
             name=problem.name,
@@ -26,6 +28,7 @@ def build_problem_summary(problem: Problem, reviews: list[Review]) -> ProblemSum
             next_review=next_review,
             attempts=len(reviews_list),
             notes=problem.notes,
+            archived=problem.archived,
         )
     else:
         res = ProblemSummary(
@@ -37,6 +40,7 @@ def build_problem_summary(problem: Problem, reviews: list[Review]) -> ProblemSum
             next_review=None,
             attempts=len(reviews_list),
             notes=problem.notes,
+            archived=problem.archived,
         )
 
     return res
