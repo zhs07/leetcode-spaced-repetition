@@ -103,7 +103,7 @@ test('review badges distinguish overdue, today, near and distant calendar dates'
   const dates = ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-06', '2026-11-07', null]
   await page.route('**/api/problems/summary', route => route.fulfill({ json: dates.map((next_review, index) => ({
     number: index + 1, name: `Example ${index + 1}`, difficulty: 'Easy', topic: 'Arrays',
-    mastery_level: next_review ? 'Partial Recall' : null, next_review, attempts: next_review ? 1 : 0, notes: '',
+    mastery_level: next_review ? 'Partial Recall' : null, next_review, attempts: next_review ? 1 : 0, notes: '', archived: false,
   })) }))
   await page.goto('/')
   const badges = page.locator('.review-date')
@@ -121,10 +121,10 @@ test('review badges distinguish overdue, today, near and distant calendar dates'
 test('filters combine and all sort directions preserve missing values last', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-31T12:00:00-07:00') })
   const summaries = [
-    { number: 1, name: 'Alpha', topic: 'Trees', difficulty: 'Hard', mastery_level: 'Mastered', next_review: '2026-11-07', attempts: 10, notes: '' },
-    { number: 2, name: 'Beta', topic: 'Arrays', difficulty: 'Easy', mastery_level: 'Learned Solution', next_review: '2026-10-30', attempts: 2, notes: '' },
-    { number: 3, name: 'Gamma', topic: 'Graphs', difficulty: 'Medium', mastery_level: 'Partial Recall', next_review: '2026-10-31', attempts: 3, notes: '' },
-    { number: 4, name: 'Delta', topic: 'Arrays', difficulty: 'Easy', mastery_level: null, next_review: null, attempts: 0, notes: '' },
+    { number: 1, name: 'Alpha', topic: 'Trees', difficulty: 'Hard', mastery_level: 'Mastered', next_review: '2026-11-07', attempts: 10, notes: '', archived: false },
+    { number: 2, name: 'Beta', topic: 'Arrays', difficulty: 'Easy', mastery_level: 'Learned Solution', next_review: '2026-10-30', attempts: 2, notes: '', archived: false },
+    { number: 3, name: 'Gamma', topic: 'Graphs', difficulty: 'Medium', mastery_level: 'Partial Recall', next_review: '2026-10-31', attempts: 3, notes: '', archived: false },
+    { number: 4, name: 'Delta', topic: 'Arrays', difficulty: 'Easy', mastery_level: null, next_review: null, attempts: 0, notes: '', archived: false },
   ]
   let loads = 0
   await page.route('**/api/problems/summary', route => { loads++; return route.fulfill({ json: summaries }) })
@@ -192,7 +192,7 @@ test('delete cancels without request, handles errors, and persists through reloa
 })
 
 test('delete handles pending state, last topic, empty list and revealed notes', async ({ page }) => {
-  const problem = { number: 500, name: 'Deletion example', topic: 'Unique topic', difficulty: 'Easy', mastery_level: null, next_review: null, attempts: 0, notes: 'Hidden solution' }
+  const problem = { number: 500, name: 'Deletion example', topic: 'Unique topic', difficulty: 'Easy', mastery_level: null, next_review: null, attempts: 0, notes: 'Hidden solution', archived: false }
   let summaries = [problem]
   await page.route('**/api/problems/summary', route => route.fulfill({ json: summaries }))
   let release!: () => void
@@ -220,4 +220,133 @@ test('delete handles pending state, last topic, empty list and revealed notes', 
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(page.getByRole('rowheader', { name: problem.name })).toBeVisible()
   await expect(page.getByText('Hidden solution', { exact: true })).not.toBeVisible()
+})
+
+test('archive preserves history and notes; restoring resumes due practice and normal scheduling', async ({ page }) => {
+  for (const [number, name, first_attempt] of [
+    [9001, 'Archive workflow', { reviewed_on: '2000-01-01', mastery_level: 'Mastered' }],
+    [9002, 'Archive for later', undefined],
+  ] as const) {
+    const response = await page.request.post('/api/problems', { data: { number, name, difficulty: 'Easy', topic: 'Archive-only topic', notes: 'Saved archive hint', ...(first_attempt ? { first_attempt } : {}) } })
+    expect(response.status()).toBe(201)
+  }
+  await page.goto('/')
+  const show = page.getByRole('combobox', { name: 'Show', exact: true })
+  const topic = page.getByRole('combobox', { name: 'Filter by topic', exact: true })
+  await topic.selectOption('Archive-only topic')
+  const reviewedRow = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Archive workflow', exact: true }) })
+  await reviewedRow.getByRole('button', { name: 'Show notes' }).click()
+  await reviewedRow.getByRole('button', { name: 'Archive Archive workflow', exact: true }).click()
+  await expect(page.getByRole('rowheader', { name: 'Archive workflow', exact: true })).toHaveCount(0)
+  await expect(page.getByText('Saved archive hint', { exact: true })).not.toBeVisible()
+  await page.getByRole('button', { name: 'Archive Archive for later', exact: true }).click()
+  await expect(page.getByRole('rowheader', { name: 'Archive for later', exact: true })).toHaveCount(0)
+  await expect(topic).toHaveValue('')
+  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled()
+  await show.selectOption('unreviewed')
+  await expect(page.getByRole('rowheader', { name: 'Archive for later', exact: true })).toHaveCount(0)
+  await show.selectOption('due')
+  await expect(page.getByRole('rowheader', { name: 'Archive workflow', exact: true })).toHaveCount(0)
+  await show.selectOption('archived')
+  await topic.selectOption('Archive-only topic')
+  await expect(page.getByRole('rowheader')).toHaveText(['Archive workflow', 'Archive for later'])
+  await expect(page.getByText('Reviews paused', { exact: true })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: /Record attempt for/ })).toHaveCount(0)
+  await expect(reviewedRow.getByRole('cell').nth(3)).toHaveText('Mastered')
+  await expect(reviewedRow.getByRole('cell').nth(5)).toHaveText('1')
+  await expect(reviewedRow.getByRole('button', { name: 'Show notes' })).toBeVisible()
+  await reviewedRow.getByRole('button', { name: 'Show notes' }).click()
+  await expect(page.getByText('Saved archive hint', { exact: true })).toBeVisible()
+  await page.screenshot({ path: 'test-results/archive-desktop.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: 'test-results/archive-mobile.png', fullPage: true })
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.reload()
+  await expect(page.getByRole('rowheader', { name: 'Archive workflow', exact: true })).toHaveCount(0)
+  await show.selectOption('archived')
+  await topic.selectOption('Archive-only topic')
+  await page.getByRole('combobox', { name: 'Filter by mastery', exact: true }).selectOption('Mastered')
+  await expect(page.getByRole('rowheader')).toHaveText(['Archive workflow'])
+  await page.getByRole('button', { name: 'Restore Archive workflow', exact: true }).click()
+  await expect(page.getByRole('rowheader', { name: 'Archive workflow', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'View active problems', exact: true }).click()
+  const summaries = await (await page.request.get('/api/problems/summary')).json()
+  const restored = summaries.find((p: { number: number }) => p.number === 9001)
+  await page.clock.install({ time: new Date(`${restored.next_review}T12:00:00-07:00`) })
+  await expect(reviewedRow.locator('time')).toHaveAttribute('datetime', restored.next_review)
+  await expect(reviewedRow).toContainText('Due today')
+  await expect(page.getByText('Saved archive hint', { exact: true })).not.toBeVisible()
+  await show.selectOption('due')
+  await topic.selectOption('Archive-only topic')
+  await expect(page.getByRole('rowheader')).toHaveText(['Archive workflow'])
+  await reviewedRow.getByRole('button', { name: 'Record attempt for Archive workflow' }).click()
+  await page.getByLabel('Completion date').fill(restored.next_review)
+  await page.getByRole('combobox', { name: 'Mastery level', exact: true }).selectOption('Solved Independently')
+  await page.getByRole('button', { name: 'Save attempt', exact: true }).click()
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page.getByRole('rowheader', { name: 'Archive workflow', exact: true })).toHaveCount(0)
+  await show.selectOption('all')
+  await expect(reviewedRow.getByRole('cell').nth(5)).toHaveText('2')
+  await expect(reviewedRow).toContainText('In 7d')
+  await expect(page.getByRole('rowheader', { name: 'Archive for later', exact: true })).toHaveCount(0)
+})
+
+test('archive and restore handle pending state, errors, empty scopes and failed refresh', async ({ page }) => {
+  let problem = { number: 9500, name: 'State example', topic: 'Unique archive topic', difficulty: 'Easy', mastery_level: null, next_review: null as string | null, attempts: 0, notes: 'Hidden archive solution', archived: false }
+  await page.route('**/api/problems/summary', route => route.fulfill({ json: [problem] }))
+  await page.goto('/')
+  const show = page.getByRole('combobox', { name: 'Show', exact: true })
+  await page.getByRole('button', { name: 'Show notes' }).click()
+  await page.getByRole('combobox', { name: 'Filter by topic', exact: true }).selectOption(problem.topic)
+  await page.route('**/api/problems/9500/archive', route => route.fulfill({ status: 503, json: { detail: 'Archive unavailable' } }))
+  await page.getByRole('button', { name: 'Archive State example', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Archive unavailable')
+  await expect(page.getByRole('rowheader', { name: problem.name })).toBeVisible()
+  await expect(page.getByText('Hidden archive solution', { exact: true })).toBeVisible()
+  await expect(page.getByText(/archived\. Your history/)).toHaveCount(0)
+  await page.unroute('**/api/problems/9500/archive')
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/api/problems/9500/archive', async route => {
+    await pending
+    problem = { ...problem, archived: true }
+    await route.fulfill({ json: { archived: true } })
+  })
+  await page.getByRole('button', { name: 'Archive State example', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Archive State example', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Delete State example' })).toBeDisabled()
+  release()
+  await expect(page.getByText('Your active list is clear')).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'Filter by topic', exact: true })).toHaveValue('')
+  await show.selectOption('archived')
+  await expect(page.getByText('Reviews paused', { exact: true })).toBeVisible()
+  await expect(page.getByText('Hidden archive solution', { exact: true })).not.toBeVisible()
+  await page.route('**/api/problems/9500/restore', route => route.fulfill({ status: 500, json: { detail: 'Restore unavailable' } }))
+  await page.getByRole('button', { name: 'Restore State example', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Restore unavailable')
+  await expect(page.getByRole('rowheader', { name: problem.name })).toBeVisible()
+  await expect(page.getByText(/restored to active/)).toHaveCount(0)
+  await page.unroute('**/api/problems/9500/restore')
+  await page.route('**/api/problems/9500/restore', route => {
+    problem = { ...problem, archived: false, next_review: '2026-09-30' }
+    return route.fulfill({ json: { restored: true } })
+  })
+  await page.unroute('**/api/problems/summary')
+  await page.route('**/api/problems/summary', route => route.fulfill({ status: 503, body: '' }))
+  await page.getByRole('button', { name: 'Restore State example', exact: true }).click()
+  await expect(page.getByText(/restored to active problems\./)).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText('503')
+  await show.selectOption('all')
+  await expect(page.getByRole('button', { name: 'Archive State example', exact: true })).toBeVisible()
+  await expect(page.getByText('Refresh for review date', { exact: true })).toBeVisible()
+  await page.unroute('**/api/problems/summary')
+  await page.route('**/api/problems/summary', route => route.fulfill({ json: [problem] }))
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(page.getByText('Refresh for review date', { exact: true })).toHaveCount(0)
+  await expect(page.locator('time')).toHaveAttribute('datetime', '2026-09-30')
+  await show.selectOption('archived')
+  await expect(page.getByText('No archived problems', { exact: true })).toBeVisible()
 })

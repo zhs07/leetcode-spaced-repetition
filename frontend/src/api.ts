@@ -1,6 +1,6 @@
 export type ProblemSummary = {
   number: number; name: string; difficulty: string; topic: string;
-  mastery_level: string | null; next_review: string | null; attempts: number; notes: string;
+  mastery_level: string | null; next_review: string | null; attempts: number; notes: string; archived: boolean;
 }
 // Exact labels from scheduler.REVIEW_INTERVALS; Python owns scheduling.
 export const masteryLevels = ['Learned Solution', 'Partial Recall', 'Solved with Struggle', 'Solved Independently', 'Mastered']

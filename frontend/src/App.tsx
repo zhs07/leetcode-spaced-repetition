@@ -150,6 +150,10 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [noticeView, setNoticeView] = useState<'all' | 'archived' | null>(null)
+  const [archivePending, setArchivePending] = useState<number | null>(null)
+  const [actionError, setActionError] = useState('')
+  const [reviewDatesPending, setReviewDatesPending] = useState<Set<number>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<ProblemSummary | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [visibleNotes, setVisibleNotes] = useState<Set<number>>(new Set())
@@ -158,9 +162,10 @@ export default function App() {
   const [mastery, setMastery] = useState('')
   const [sortBy, setSortBy] = useState('next_review')
   const [direction, setDirection] = useState('asc')
-  const topics = [...new Set(problems.map(problem => problem.topic))].sort((a, b) => a.localeCompare(b))
-  const shownProblems = problems.filter(problem =>
-    (view === 'all' || (view === 'due' ? problem.next_review !== null && problem.next_review <= today : problem.mastery_level === null)) &&
+  const scopeProblems = problems.filter(problem => view === 'archived' ? problem.archived : !problem.archived)
+  const topics = [...new Set(scopeProblems.map(problem => problem.topic))].sort((a, b) => a.localeCompare(b))
+  const shownProblems = scopeProblems.filter(problem =>
+    (view === 'all' || view === 'archived' || (view === 'due' ? problem.next_review !== null && problem.next_review <= today : problem.mastery_level === null)) &&
     (!topic || problem.topic === topic) && (!mastery || problem.mastery_level === mastery)
   ).sort((a, b) => {
     const value = (problem: ProblemSummary): string | number | null => {
@@ -179,12 +184,23 @@ export default function App() {
     const comparison = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right))
     return comparison * (direction === 'asc' ? 1 : -1) || a.number - b.number
   })
-  function clearFilters() { setView('all'); setTopic(''); setMastery('') }
+  const hasFilters = view === 'due' || view === 'unreviewed' || topic || mastery
+  function clearFilters() { if (view !== 'archived') setView('all'); setTopic(''); setMastery('') }
+  function changeView(nextView: string) {
+    if ((view === 'archived') !== (nextView === 'archived')) { setTopic(''); setMastery('') }
+    setView(nextView)
+  }
+  function clearStaleTopic(data: ProblemSummary[]) {
+    if (topic && !data.some(problem => problem.topic === topic && (view === 'archived' ? problem.archived : !problem.archived))) setTopic('')
+  }
   const latestRequest = useRef(0)
   async function refresh() {
     const id = ++latestRequest.current
     setLoading(true); setError('')
-    try { const data = await request<ProblemSummary[]>('/problems/summary'); if (id === latestRequest.current) setProblems(data) }
+    try {
+      const data = await request<ProblemSummary[]>('/problems/summary')
+      if (id === latestRequest.current) { setProblems(data); setReviewDatesPending(new Set()); clearStaleTopic(data) }
+    }
     catch (failure) { if (id === latestRequest.current) setError(failure instanceof Error ? failure.message : 'Could not load your problems.') }
     finally { if (id === latestRequest.current) setLoading(false) }
   }
@@ -199,48 +215,75 @@ export default function App() {
   function toggleNotes(number: number) {
     setVisibleNotes(previous => { const next = new Set(previous); if (next.has(number)) next.delete(number); else next.add(number); return next })
   }
+  async function changeArchive(problem: ProblemSummary) {
+    if (archivePending !== null || loading) return
+    const action = problem.archived ? 'restore' : 'archive'
+    setArchivePending(problem.number); setActionError(''); setNotice(''); setNoticeView(null)
+    try {
+      await request(`/problems/${problem.number}/${action}`, undefined, 'POST')
+      // Apply the confirmed status immediately, even if fetching fresh dates fails.
+      const updated = problems.map(item => item.number === problem.number ? { ...item, archived: !problem.archived, next_review: null } : item)
+      setProblems(updated)
+      clearStaleTopic(updated)
+      setVisibleNotes(previous => { const next = new Set(previous); next.delete(problem.number); return next })
+      if (action === 'restore') setReviewDatesPending(previous => new Set(previous).add(problem.number))
+      setNotice(`#${problem.number} ${problem.name} ${action === 'archive' ? 'archived. Your history is preserved.' : 'restored to active problems.'}`)
+      setNoticeView(action === 'archive' ? 'archived' : 'all')
+      await refresh()
+    } catch (failure) {
+      setActionError(`Could not ${action} #${problem.number} ${problem.name}: ${failure instanceof Error ? failure.message : 'Please try again.'}`)
+    } finally { setArchivePending(null) }
+  }
   return <main className="mx-auto max-w-[1440px] px-5 py-12 sm:px-10 sm:py-16">
     <header className="text-center mb-12">
       <p className="eyebrow mb-3">A little practice. Lasting recall.</p>
       <h1 className="text-5xl font-semibold tracking-tight text-slate-900">LeetCode<span className="text-indigo-500">.</span></h1>
       <p className="mt-4 text-slate-500">Your practice, one attempt at a time.</p>
-      <button className="primary mt-6" onClick={() => setEditor({ kind: 'problem' })}><span aria-hidden="true">＋ </span>Add problem</button>
+      <button className="primary mt-6" disabled={archivePending !== null} onClick={() => setEditor({ kind: 'problem' })}><span aria-hidden="true">＋ </span>Add problem</button>
     </header>
     <section aria-labelledby="table-title" className="table-card">
       <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b border-slate-100">
-        <div className="flex items-center gap-3"><h2 id="table-title" className="font-semibold">Your problems</h2><span className="count">{problems.length}</span></div>
-        <button className="text-button" onClick={() => { setNotice(''); void refresh() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+        <div className="flex items-center gap-3"><h2 id="table-title" className="font-semibold">{view === 'archived' ? 'Archived problems' : 'Your problems'}</h2><span className="count">{scopeProblems.length}</span></div>
+        <button className="text-button" onClick={() => { setNotice(''); setNoticeView(null); setActionError(''); void refresh() }} disabled={loading || archivePending !== null}>{loading ? 'Refreshing…' : 'Refresh'}</button>
       </div>
       <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="text-xs text-slate-500">Show<select value={view} onChange={event => setView(event.target.value)}><option value="all">All problems</option><option value="due">Due & overdue</option><option value="unreviewed">Not reviewed</option></select></label>
+          <label className="text-xs text-slate-500">Show<select value={view} onChange={event => changeView(event.target.value)}><option value="all">Active problems</option><option value="due">Due & overdue</option><option value="unreviewed">Not reviewed</option><option value="archived">Archived</option></select></label>
           <label className="text-xs text-slate-500">Filter by topic<select value={topic} onChange={event => setTopic(event.target.value)}><option value="">All topics</option>{topics.map(item => <option key={item}>{item}</option>)}</select></label>
           <label className="text-xs text-slate-500">Filter by mastery<select value={mastery} onChange={event => setMastery(event.target.value)}><option value="">All mastery levels</option>{masteryLevels.map(item => <option key={item}>{item}</option>)}</select></label>
           <label className="text-xs text-slate-500">Sort by<select value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="next_review">Next review</option><option value="attempts">Attempts</option><option value="difficulty">Difficulty</option><option value="mastery">Mastery level</option><option value="topic">Topic</option></select></label>
           <label className="text-xs text-slate-500">Direction<select value={direction} onChange={event => setDirection(event.target.value)}><option value="asc">Ascending ↑</option><option value="desc">Descending ↓</option></select></label>
         </div>
         <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-slate-500" role="status">Showing {shownProblems.length} of {problems.length} problems</p>
-          {(view !== 'all' || topic || mastery) && <button className="text-button" onClick={clearFilters}>Clear filters</button>}
+          <p className="text-xs text-slate-500" role="status">Showing {shownProblems.length} of {scopeProblems.length} {view === 'archived' ? 'archived problems' : 'problems'}</p>
+          {hasFilters && <button className="text-button" onClick={clearFilters}>Clear filters</button>}
         </div>
       </div>
-      {notice && <p role="status" className="px-6 pt-4 text-sm text-emerald-700">{notice}</p>}
+      <p className="px-6 pt-4 text-xs text-slate-500">{view === 'archived' ? 'Review scheduling is paused. Restore a problem when you want to practice it again.' : 'Archive a problem when you’re ready to pause reviews. Its history stays saved.'}</p>
+      {notice && <p role="status" className="px-6 pt-4 text-sm text-emerald-700">{notice} {noticeView && noticeView !== view && scopeProblems.length > 0 && <button className="text-button underline" onClick={() => changeView(noticeView)}>{noticeView === 'archived' ? 'View archived' : 'View active problems'}</button>}</p>}
+      {actionError && <p role="alert" className="error m-5">{actionError}</p>}
       {error && <div role="alert" className="error m-5">{error} {problems.length > 0 && 'Showing the last loaded data.'} <button className="underline font-semibold" onClick={() => void refresh()}>Try again</button></div>}
       {loading && problems.length === 0 ? <p role="status" className="empty-state">Loading your practice history…</p> :
-        problems.length === 0 && !error ? <div className="empty-state">
+        problems.length === 0 && !error && view !== 'archived' ? <div className="empty-state">
           <div className="empty-icon" aria-hidden="true">&lt;/&gt;</div><h3 className="text-xl font-semibold text-slate-800 mt-5">A fresh start for your practice</h3>
           <p className="mt-2">Add a problem with your first attempt, or save it to practice later.</p>
           <button className="text-button mt-5" onClick={() => setEditor({ kind: 'problem' })}>Add your first problem →</button>
-        </div> : problems.length > 0 && shownProblems.length === 0 ? <div className="empty-state"><h3 className="text-lg font-semibold text-slate-700">No matching problems</h3><p className="mt-2">Try another filter combination to see more of your list.</p><button className="text-button mt-4" onClick={clearFilters}>Show all problems</button></div> : problems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
+        </div> : scopeProblems.length === 0 && !error ? <div className="empty-state"><h3 className="text-lg font-semibold text-slate-700">{view === 'archived' ? 'No archived problems' : 'Your active list is clear'}</h3><p className="mt-2">{view === 'archived' ? 'Problems you archive will appear here with their history.' : 'Your saved problems are archived. Restore one whenever you want to practice it again.'}</p><button className="text-button mt-4" onClick={() => changeView(view === 'archived' ? 'all' : 'archived')}>{view === 'archived' ? 'View active problems' : 'View archived'}</button></div> : scopeProblems.length > 0 && shownProblems.length === 0 ? <div className="empty-state"><h3 className="text-lg font-semibold text-slate-700">No matching problems</h3><p className="mt-2">Try another filter combination to see more of your list.</p><button className="text-button mt-4" onClick={clearFilters}>{view === 'archived' ? 'Show archived problems' : 'Show active problems'}</button></div> : scopeProblems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
           <table><thead><tr>{['Number', 'Name', 'Difficulty', 'Topic', 'Mastery Level', 'Next review', 'Attempts', 'Notes', 'Action'].map(title => <th key={title} scope="col">{title}</th>)}</tr></thead>
             <tbody>{shownProblems.map(problem => <Fragment key={problem.number}><tr>
               <td className="text-slate-400 font-mono">{problem.number}</td><th scope="row" className="problem-name">{problem.name}</th>
               <td><span className={`badge ${problem.difficulty.toLowerCase()}`}>{problem.difficulty}</span></td><td className="text-slate-500">{problem.topic}</td>
               <td><span className={problem.mastery_level ? `mastery-badge ${masteryColors[problem.mastery_level] ?? ''}` : 'text-slate-400'}>{problem.mastery_level ?? 'Not reviewed'}</span></td>
-              <td className="whitespace-nowrap text-slate-600"><ReviewDate value={problem.next_review} today={today} /></td>
+              <td className="whitespace-nowrap text-slate-600">{problem.archived ? <span className="archive-badge">Reviews paused</span> : reviewDatesPending.has(problem.number) ? <span className="text-slate-500">Refresh for review date</span> : <ReviewDate value={problem.next_review} today={today} />}</td>
               <td className="font-mono">{problem.attempts}</td>
               <td>{problem.notes ? <button className="text-button whitespace-nowrap" aria-expanded={visibleNotes.has(problem.number)} aria-controls={`notes-${problem.number}`} onClick={() => toggleNotes(problem.number)}>{visibleNotes.has(problem.number) ? 'Hide notes' : 'Show notes'}</button> : <span className="text-slate-400">No notes</span>}</td>
-              <td><div className="flex flex-col items-start gap-2"><button className="row-button" onClick={() => setEditor({ kind: 'attempt', problem })} aria-label={`Record attempt for ${problem.name}`}>Record attempt</button><button className="delete-link" aria-label={`Delete ${problem.name}`} onClick={() => { setNotice(''); setDeleteTarget(problem) }}>Delete</button></div></td>
+              <td><div className="flex flex-col items-start gap-2">
+                {!problem.archived && <button className="row-button" disabled={loading || archivePending !== null} onClick={() => setEditor({ kind: 'attempt', problem })} aria-label={`Record attempt for ${problem.name}`}>Record attempt</button>}
+                <div className="flex items-center gap-1">
+                  <button className={problem.archived ? 'row-button' : 'archive-link'} disabled={loading || archivePending !== null} onClick={() => void changeArchive(problem)} aria-label={`${problem.archived ? 'Restore' : 'Archive'} ${problem.name}`} title={problem.archived ? 'Resume reviews; this problem becomes due immediately.' : 'Pause reviews and keep your history.'}>{archivePending === problem.number ? problem.archived ? 'Restoring…' : 'Archiving…' : problem.archived ? 'Restore' : 'Archive'}</button>
+                  <button className="delete-link" disabled={loading || archivePending !== null} aria-label={`Delete ${problem.name}`} onClick={() => { setNotice(''); setNoticeView(null); setActionError(''); setDeleteTarget(problem) }}>Delete</button>
+                </div>
+              </div></td>
             </tr>{visibleNotes.has(problem.number) && <tr id={`notes-${problem.number}`}><td colSpan={9} className="notes-cell"><p className="eyebrow mb-2">Your notes · {problem.name}</p><p className="whitespace-pre-wrap break-words max-w-3xl">{problem.notes}</p></td></tr>}</Fragment>)}</tbody>
           </table>
         </div>}
@@ -250,13 +293,14 @@ export default function App() {
       const remaining = problems.filter(problem => problem.number !== deleteTarget.number)
       setProblems(remaining)
       setVisibleNotes(previous => { const next = new Set(previous); next.delete(deleteTarget.number); return next })
-      if (topic && !remaining.some(problem => problem.topic === topic)) setTopic('')
+      clearStaleTopic(remaining)
+      setReviewDatesPending(previous => { const next = new Set(previous); next.delete(deleteTarget.number); return next })
       setNotice(`#${deleteTarget.number} ${deleteTarget.name} deleted.`)
       setDeleteTarget(null)
       void refresh()
     }} />}
     {editor && <EntryDialog editor={editor} onClose={() => setEditor(null)} onSaved={() => {
-      setNotice(editor.kind === 'problem' ? 'Problem added.' : 'Attempt recorded.'); setEditor(null); void refresh()
+      setNotice(editor.kind === 'problem' ? 'Problem added.' : 'Attempt recorded.'); setNoticeView(null); setActionError(''); setEditor(null); void refresh()
     }} />}
   </main>
 }

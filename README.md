@@ -12,11 +12,12 @@ and create a tool I will use for reviewing LeetCode problems.
 - The Api can create problems, record attempts, and retrieve due problems
 - Request validation and automated tests exist
 - React interface for adding problems, recording attempts, and viewing summaries with hidden notes
+- Delete unwanted problems and their attempts, with confirmation.
+- Archive problems to pause reviews while keeping their history; restore them to make them due immediately. A new attempt resumes the normal schedule.
 
 ## Planned functionality
 - Randomly select a due problem, with options to hide its topic,
   name, and difficulty + from specific curated list if user want(nc 250/150, blind 75/grind 75 etc.)
-- Support archiving and restoring problems.
 - Explore automatic archiving based on repeated mastered attempts
   and problem difficulty.
 
