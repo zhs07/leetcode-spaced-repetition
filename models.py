@@ -15,5 +15,6 @@ class Problem:
     topic : str
     notes: str
     archived: bool = False
+    review_due_on: date | None = None
     
     

@@ -26,7 +26,8 @@ def initialize_database(database_path: str) -> None:
                 difficulty TEXT NOT NULL,
                 topic TEXT NOT NULL,
                 notes TEXT NOT NULL,
-                archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+                archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+                review_due_on TEXT
             )
         """)
         connection.execute("""
@@ -47,6 +48,12 @@ def initialize_database(database_path: str) -> None:
                 ALTER TABLE problems
                 ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
                 """)
+        if "review_due_on" not in columns_names:
+            connection.execute(
+                """
+                ALTER TABLE problems ADD COLUMN review_due_on TEXT
+                """
+            )
         connection.commit()
     finally:
         connection.close()
@@ -79,7 +86,7 @@ def get_all_problems(database_path: str) -> list[Problem]:
 
     try:
         rows = connection.execute("""
-            SELECT number, name, difficulty, topic, notes, archived
+            SELECT number, name, difficulty, topic, notes, archived, review_due_on
             FROM problems
             ORDER BY number
             """).fetchall()
@@ -95,6 +102,11 @@ def get_all_problems(database_path: str) -> list[Problem]:
             topic=row[3],
             notes=row[4],
             archived=bool(row[5]),
+            review_due_on=(
+                date.fromisoformat(row[6])
+                if row[6] is not None
+                else None
+            )
         )
         problems.append(problem)
 
@@ -116,7 +128,17 @@ def save_review(database_path: str, review: Review) -> None:
                 review.mastery_level,
             ),
         )
+        connection.execute(
+            """
+            UPDATE problems SET review_due_on = NULL WHERE number = ?
+            """,
+            (review.problem_number,)
+            
+        )
         connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 
@@ -228,6 +250,40 @@ def archive_problem(database_path: str, problem_number: int) -> bool:
         connection.commit()
 
         return cursor.rowcount == 1
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+        
+def restore_problem(
+    database_path: str,
+    problem_number: int,
+    restored_on: date,
+) -> bool:
+    connection = get_connection(database_path)
+
+    try:
+        connection.execute(
+            """
+            UPDATE problems
+            SET archived = 0, review_due_on = ?
+            WHERE number = ? and ARCHIVED = 1
+            """,
+            (restored_on.isoformat(), problem_number)
+            
+        )
+
+        row = connection.execute(
+            "SELECT number FROM problems WHERE number = ?",
+            (problem_number,),
+        ).fetchone()
+
+        connection.commit()
+
+        return row is not None
 
     except Exception:
         connection.rollback()
