@@ -2,6 +2,7 @@ import sqlite3
 from models import Problem, Review
 from datetime import date
 
+
 def get_connection(database_path: str) -> sqlite3.Connection:
     connection = sqlite3.connect(database_path)
 
@@ -13,6 +14,7 @@ def get_connection(database_path: str) -> sqlite3.Connection:
 
     return connection
 
+
 def initialize_database(database_path: str) -> None:
     connection = get_connection(database_path)
 
@@ -23,7 +25,8 @@ def initialize_database(database_path: str) -> None:
                 name TEXT NOT NULL,
                 difficulty TEXT NOT NULL,
                 topic TEXT NOT NULL,
-                notes TEXT NOT NULL
+                notes TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
             )
         """)
         connection.execute("""
@@ -35,13 +38,22 @@ def initialize_database(database_path: str) -> None:
                 FOREIGN KEY (problem_number) REFERENCES problems(number)
             )
         """)
+        columns = connection.execute("PRAGMA table_info(problems)").fetchall()
+
+        columns_names = {row[1] for row in columns}
+
+        if "archived" not in columns_names:
+            connection.execute("""
+                ALTER TABLE problems
+                ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+                """)
         connection.commit()
     finally:
         connection.close()
 
 
 def save_problem(database_path: str, problem: Problem) -> None:
-    connection =get_connection(database_path)
+    connection = get_connection(database_path)
 
     try:
         connection.execute(
@@ -67,7 +79,7 @@ def get_all_problems(database_path: str) -> list[Problem]:
 
     try:
         rows = connection.execute("""
-            SELECT number, name, difficulty, topic, notes
+            SELECT number, name, difficulty, topic, notes, archived
             FROM problems
             ORDER BY number
             """).fetchall()
@@ -76,7 +88,14 @@ def get_all_problems(database_path: str) -> list[Problem]:
     problems = []
 
     for row in rows:
-        problem = Problem(number=row[0], name=row[1], difficulty=row[2], topic=row[3], notes=row[4])
+        problem = Problem(
+            number=row[0],
+            name=row[1],
+            difficulty=row[2],
+            topic=row[3],
+            notes=row[4],
+            archived=bool(row[5]),
+        )
         problems.append(problem)
 
     return problems
@@ -84,7 +103,7 @@ def get_all_problems(database_path: str) -> list[Problem]:
 
 def save_review(database_path: str, review: Review) -> None:
     connection = get_connection(database_path)
-    
+
     try:
         connection.execute(
             """
@@ -95,16 +114,18 @@ def save_review(database_path: str, review: Review) -> None:
                 review.problem_number,
                 review.reviewed_on.isoformat(),
                 review.mastery_level,
-    
             ),
         )
         connection.commit()
     finally:
         connection.close()
 
-def get_all_reviews(database_path: str, ) -> list[Review]:
+
+def get_all_reviews(
+    database_path: str,
+) -> list[Review]:
     connection = get_connection(database_path)
-    
+
     try:
         rows = connection.execute("""
             SELECT problem_number, reviewed_on, mastery_level
@@ -113,11 +134,15 @@ def get_all_reviews(database_path: str, ) -> list[Review]:
             """).fetchall()
     finally:
         connection.close()
-        
+
     reviews = []
 
     for row in rows:
-        review = Review(problem_number=row[0], reviewed_on=date.fromisoformat(row[1]), mastery_level=row[2])
+        review = Review(
+            problem_number=row[0],
+            reviewed_on=date.fromisoformat(row[1]),
+            mastery_level=row[2],
+        )
         reviews.append(review)
 
     return reviews
@@ -132,7 +157,7 @@ def save_problem_with_first_attempt(
         raise ValueError
 
     connection = get_connection(database_path)
-    
+
     try:
         connection.execute(
             """
@@ -145,36 +170,35 @@ def save_problem_with_first_attempt(
                 problem.difficulty,
                 problem.topic,
                 problem.notes,
-            )   
+            ),
         )
         if first_attempt is not None:
             connection.execute(
-                    """
+                """
                     INSERT INTO reviews (problem_number, reviewed_on, mastery_level)
                     VALUES (?, ?, ?)
                     """,
-                    (
-                        first_attempt.problem_number,
-                        first_attempt.reviewed_on.isoformat(),
-                        first_attempt.mastery_level,
-            
-                    ),
-                )
+                (
+                    first_attempt.problem_number,
+                    first_attempt.reviewed_on.isoformat(),
+                    first_attempt.mastery_level,
+                ),
+            )
         connection.commit()
     except Exception:
         connection.rollback()
         raise
     finally:
         connection.close()
-        
+
+
 def delete_problem(database_path: str, problem_number: int) -> bool:
     connection = get_connection(database_path)
 
     try:
         connection.execute(
             "DELETE FROM reviews WHERE problem_number = ?",
-            (problem_number,),            
-            
+            (problem_number,),
         )
         cursor = connection.execute(
             "DELETE FROM problems WHERE number = ?",
@@ -189,5 +213,25 @@ def delete_problem(database_path: str, problem_number: int) -> bool:
 
     finally:
         connection.close()
-        
+
     return cursor.rowcount == 1
+
+def archive_problem(database_path: str, problem_number: int) -> bool:
+    connection = get_connection(database_path)
+
+    try:
+        cursor = connection.execute(
+            "UPDATE problems SET archived = 1 WHERE number = ?",
+            (problem_number,),
+        )
+        
+        connection.commit()
+
+        return cursor.rowcount == 1
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()

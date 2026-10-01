@@ -65,6 +65,7 @@ def test_post_problem_saves_valid_problem(tmp_path, monkeypatch):
         "difficulty": "Easy",
         "topic": "Arrays & Hashing",
         "notes": "",
+        "archived": False,
     }
 
     with TestClient(main.app) as client:

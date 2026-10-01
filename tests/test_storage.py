@@ -8,9 +8,11 @@ from storage import (
     get_all_reviews,
     save_problem_with_first_attempt,
     delete_problem,
+    archive_problem
 )
 import sqlite3
 import pytest
+from dataclasses import replace
 
 
 def test_saved_problem_can_be_loaded(tmp_path):
@@ -254,3 +256,102 @@ def test_failed_problem_delete_restores_reviews(tmp_path):
 
     assert get_all_problems(database_path) == [problem]
     assert get_all_reviews(database_path) == [review]
+    
+def test_archive_migration_preserves_existing_data(tmp_path):
+    database_path = str(tmp_path / "test.db")
+
+    # Recreate the OLD schema: no archived column.
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.executescript("""
+            CREATE TABLE problems (
+                number INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                difficulty TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                notes TEXT NOT NULL
+            );
+            CREATE TABLE reviews (
+                id INTEGER PRIMARY KEY,
+                problem_number INTEGER NOT NULL,
+                reviewed_on TEXT NOT NULL,
+                mastery_level TEXT NOT NULL,
+                FOREIGN KEY (problem_number) REFERENCES problems(number)
+            );
+        """)
+        connection.commit()
+    finally:
+        connection.close()
+
+    problem = Problem(
+        number=1,
+        name="Two Sum",
+        difficulty="Easy",
+        topic="Arrays & Hashing",
+        notes="Keep my notes",
+    )
+    review = Review(
+        problem_number=1,
+        reviewed_on=date(2026, 9, 29),
+        mastery_level="Partial Recall",
+    )
+
+    save_problem(database_path, problem)
+    save_review(database_path, review)
+
+    initialize_database(database_path)
+    initialize_database(database_path)
+
+    loaded_problem = get_all_problems(database_path) 
+    assert loaded_problem == [problem]
+    assert loaded_problem[0].archived is False
+
+    assert get_all_reviews(database_path) == [review]
+    
+def test_archive_preserves_problem_and_history(tmp_path):
+    database_path = str(tmp_path / "test.db")
+    initialize_database(database_path)
+
+    target = Problem(
+        number=1,
+        name="Two Sum",
+        difficulty="Easy",
+        topic="Arrays & Hashing",
+        notes="Keep these notes",
+    )
+    other = Problem(
+        number=217,
+        name="Contains Duplicate",
+        difficulty="Easy",
+        topic="Arrays & Hashing",
+        notes="",
+    )
+    review = Review(
+        problem_number=1,
+        reviewed_on=date(2026, 9, 29),
+        mastery_level="Partial Recall",
+    )
+
+    save_problem(database_path, target)
+    save_problem(database_path, other)
+    save_review(database_path, review)
+    
+    res = archive_problem(database_path, target.number)
+    
+    assert res is True
+    assert get_all_problems(database_path) == [replace(target, archived=True), other]
+    assert get_all_reviews(database_path) == [review]
+
+    res_two = archive_problem(database_path, target.number)
+    assert res_two is True
+    assert get_all_problems(database_path) == [replace(target, archived=True), other]
+    assert get_all_reviews(database_path) == [review]
+    
+def test_archive_missing_problem_returns_false(tmp_path):
+    database_path = str(tmp_path / "test.db")
+    initialize_database(database_path)
+
+    res = archive_problem(database_path, 999)
+    assert res is False
+    assert get_all_problems(database_path) == []
+    assert get_all_reviews(database_path) == []

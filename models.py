@@ -14,5 +14,6 @@ class Problem:
     difficulty : str
     topic : str
     notes: str
+    archived: bool = False
     
     
