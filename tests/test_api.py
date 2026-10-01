@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pytest
 
 import main
 from models import Problem, Review
@@ -247,3 +248,81 @@ def test_delete_missing_problem_returns_404(tmp_path, monkeypatch):
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Problem not found"}
+
+
+@pytest.mark.parametrize("has_history", [False, True])
+def test_archive_restore_and_practice_flow(tmp_path, monkeypatch, has_history):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 9, 30)
+
+    database_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(main, "DATABASE_PATH", database_path)
+    monkeypatch.setattr(main, "date", FixedDate)
+    payload = {
+        "number": 1,
+        "name": "Two Sum",
+        "difficulty": "Easy",
+        "topic": "Arrays & Hashing",
+        "notes": "Keep my approach",
+    }
+    if has_history:
+        payload["first_attempt"] = {
+            "reviewed_on": "2026-09-29",
+            "mastery_level": "Mastered",
+        }
+
+    with TestClient(main.app) as client:
+        assert client.post("/problems", json=payload).status_code == 201
+        other = {"number": 217, "name": "Contains Duplicate", "difficulty": "Easy", "topic": "Arrays"}
+        assert client.post("/problems", json=other).status_code == 201
+        original_reviews = client.get("/reviews").json()
+        for _ in range(2):
+            archived = client.post("/problems/1/archive")
+            assert archived.status_code == 200
+            assert archived.json() == {"archived": True}
+        summaries = client.get("/problems/summary").json()
+        assert summaries[0]["archived"] is True
+        assert summaries[0]["next_review"] is None
+        assert summaries[0]["notes"] == payload["notes"]
+        assert summaries[0]["attempts"] == int(has_history)
+        assert summaries[0]["mastery_level"] == ("Mastered" if has_history else None)
+        assert summaries[1]["archived"] is False
+        assert client.get("/problems/due").json() == []
+        assert client.get("/reviews").json() == original_reviews
+
+        for _ in range(2):
+            restored = client.post("/problems/1/restore")
+            assert restored.status_code == 200
+            assert restored.json() == {"restored": True}
+        summary = client.get("/problems/summary").json()[0]
+        assert summary["archived"] is False
+        assert summary["next_review"] == "2026-09-30"
+        assert summary["attempts"] == int(has_history)
+        assert [p["number"] for p in client.get("/problems/due").json()] == [1]
+        assert client.get("/reviews").json() == original_reviews
+
+        attempt = {"problem_number": 1, "reviewed_on": "2026-09-30", "mastery_level": "Solved Independently"}
+        assert client.post("/reviews", json=attempt).status_code == 201
+        # A repeated restore of an active problem must preserve its new schedule.
+        assert client.post("/problems/1/restore").json() == {"restored": True}
+        summary = client.get("/problems/summary").json()[0]
+        assert summary["next_review"] == "2026-10-07"
+        assert summary["attempts"] == int(has_history) + 1
+        assert summary["mastery_level"] == "Solved Independently"
+        assert client.get("/reviews").json() == original_reviews + [attempt]
+        assert client.get("/problems/due").json() == []
+        assert get_all_problems(database_path)[0].review_due_on is None
+
+
+@pytest.mark.parametrize("action", ["archive", "restore"])
+def test_archive_and_restore_missing_problem_return_404(tmp_path, monkeypatch, action):
+    database_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(main, "DATABASE_PATH", database_path)
+    with TestClient(main.app) as client:
+        response = client.post(f"/problems/999/{action}")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Problem not found"}
+    assert get_all_problems(database_path) == []
+    assert get_all_reviews(database_path) == []

@@ -9,7 +9,10 @@ from storage import (
     save_review,
     save_problem_with_first_attempt,
     initialize_database,
-    delete_problem
+    delete_problem,
+    archive_problem,
+    restore_problem
+    
 )
 from datetime import date
 from tracker import get_due_problems
@@ -127,5 +130,22 @@ def remove_problem(problem_number: int) -> dict[str, bool]:
             detail="Problem not found"
         )
 
-    
     return {"deleted": True}
+
+@app.post("/problems/{problem_number}/archive")
+def archive_tracked_problem(problem_number: int) -> dict[str, bool]:
+    res = archive_problem(DATABASE_PATH, problem_number)
+    
+    if res is False:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    return {"archived": True}
+
+@app.post("/problems/{problem_number}/restore")
+def restore_tracked_problem(problem_number: int) -> dict[str, bool]:
+    res = restore_problem(DATABASE_PATH, problem_number, date.today())
+    
+    if res is False:
+        raise HTTPException(status_code=404, detail="Problem not found")
+    
+    return {"restored": True}
