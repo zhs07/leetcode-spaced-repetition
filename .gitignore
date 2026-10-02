@@ -13,3 +13,4 @@ tracker.db
 /include/
 /lib/
 /pyvenv.cfg
+handoff.md
