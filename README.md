@@ -1,121 +1,42 @@
 # LeetCode Review Tracker
 
-A spaced repetition tracker inspired by my personal Notion workflow.
+A focused spaced-repetition app for technical interview practice.
 
-I am building this project to learn fullstack development with Python
-and create a tool I will use for reviewing LeetCode problems.
+## Why I built it
 
-## Current functionality
-- Calculate the next review date from a manually selected mastery level.
-- Schedule reviews relative to the actual completion date.
-- Problems and reviews are now stored in SQLite
-- The Api can create problems, record attempts, and retrieve due problems
-- Request validation and automated tests exist
-- React interface for adding problems, recording attempts, and viewing summaries with hidden notes
-- Delete unwanted problems and their attempts, with confirmation.
-- Archive problems to pause reviews while keeping their history; restore them to make them due immediately. A new attempt resumes the normal schedule.
-- Import a Notion CSV with a preview, row errors, confirmation, and preserved attempt totals. Existing problems are skipped.
-- Random pick chooses a saved due/overdue problem for blind practice, showing its statement while hiding identifying details.
+I started tracking LeetCode practice in Notion. That gave me a review routine,
+but I wanted more control over how I recorded attempts, scheduled reviews,
+and chose what to practice next.
 
-## Blind practice
+I built this app around that workflow while learning full-stack development.
+It keeps a history of my attempts, schedules the next review from how an attempt
+actually went, and lets me pause problems without losing their history.
+Blind practice hides the problem's name, topic, difficulty, and notes so I can
+try it without those advance clues.
 
-Click **Random pick** to open one randomly selected active problem whose review
-date is today or earlier. The draw uses your entire saved due list, independent
-of table filters. Archived, future-scheduled, and unscheduled problems are excluded.
+The goal is a clear, minimal tool I want to use myself, and can eventually share
+with other people preparing for interviews.
 
-The dialog shows only the statement, examples, and constraints. Name, number,
-topic, difficulty, history, notes, and the LeetCode link stay hidden until
-**Reveal details**. **Record attempt** saves directly to the selected problem
-without revealing its identity and uses the usual mastery schedule. Picking or
-closing a problem never records an attempt.
+## What it does
 
-On the first pick, FastAPI looks up the problem number in LeetCode's public index
-and retrieves that one description. It caches the description in SQLite;
-subsequent picks use the saved copy without another LeetCode request. The public
-endpoints may change or be unavailable. Premium/unavailable statements have a
-retry and plain-text paste fallback. Paste a statement once and later picks use
-that local copy. No LeetCode login or new dependencies are required.
+- **Schedule reviews:** record an attempt and choose a mastery level to set the next review date.
+- **Practice blind:** randomly pick an active due problem, read its statement, and reveal details when ready.
+- **Keep useful history:** save notes, filter and sort problems, and archive or restore problems as needed.
+- **Bring your Notion data:** preview a CSV import, see row errors, and preserve historical attempt totals without adding duplicates.
+- **Stay focused:** a minimal interface with light and dark modes and clear mastery and due-date indicators.
 
-Formatting is converted to allowed display nodes and rendered with React.
-Scripts, source styles, interactive links, and arbitrary HTML attributes are
-excluded; HTTPS diagrams are allowed only from recognized LeetCode image hosts.
+## Built with
 
-API: POST `/practice/random`, POST `/practice/{number}/statement/load`,
-PUT `/practice/{number}/statement` with `{"text": "..."}`, and
-GET `/problems/{number}/summary` for an explicit reveal. Statement caches have
-a foreign key to the saved problem and are removed when it is deleted.
+- **Backend:** Python, FastAPI, SQLite
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS
+- **Testing:** pytest and Playwright, using isolated test databases
 
-## Importing from Notion
+## Run it locally or explore the code
 
-Click **Import CSV**, choose the exported CSV (prefer the fuller `_all.csv`
-export), and click **Preview import**. Check the valid problems and reported
-row errors, then confirm. Nothing is saved during preview. Invalid and empty
-rows are excluded; existing problem numbers keep their data and history.
+The app currently runs locally. Public deployment is the next milestone.
 
-The supported columns are `Problem`, `Difficulty`, `Topic`, `Last Reviewed`,
-`Mastery`, `Pattern/Trick`, and `Reviews`. Titles must end with a positive
-problem number, dates use a format such as `September 10, 2026`, and mastery
-supports the exported labels 🔵 Mastered, 🟢 Solved Independently, and
-🟡 Solved With Struggle. If `Review Interval (Days)` is included, it must match
-the app's mastery schedule. Relative exported review-status text is ignored.
+- [Development guide](docs/development.md): local setup, tests, import behavior, and statement retrieval.
+- [Frontend guide](frontend/README.md): UI architecture, API flow, and browser tests.
 
-Notion exports contain only the latest review and total attempts. The import
-stores that one review plus an older-attempt count, without inventing review
-history. Notes (including commas and newlines) are preserved. Next review dates
-come from the latest review and the app's scheduling rules.
-
-`POST /imports/notion/preview` and `POST /imports/notion` both accept JSON
-`{"csv_text": "..."}`. Confirmation reparses the CSV on the server and saves
-the accepted batch in one transaction. Reimporting the same file adds no
-duplicate reviews; any database failure rolls back the whole batch.
-
-Startup also repairs the earlier nullable/TEXT `historical_attempts` column
-if it is present: missing older counts become zero, valid counts and review
-records are retained, and the column gets its integer/default/check constraints.
-Before this repair, it saves a SQLite backup beside the database as
-`tracker.db.before-import-counts.bak` (ignored by Git).
-
-## Planned functionality
-- Support curated practice lists (NeetCode 250/150, Blind 75, Grind 75, etc.).
-- Explore automatic archiving based on repeated mastered attempts
-  and problem difficulty.
-
-## Local setup
-
-Developed with Python 3.14.
-
-From the project folder:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-fastapi dev main.py
-```
-
-The activation command above is for macOS/Linux.
-
-Open http://127.0.0.1:8000/docs to explore the API.
-The SQLite database is created automatically on startup.
-
-## Running tests
-
-With the virtual environment active:
-
-```bash
-python -m pytest
-```
-## Frontend development
-
-Requires Node.js 24 LTS and npm. Keep FastAPI running in one terminal.
-In a second terminal, from the repository root:
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-Open the URL Vite prints (normally http://127.0.0.1:5173).
-The frontend forwards `/api` requests to FastAPI at http://127.0.0.1:8000.
-See [frontend/README.md](frontend/README.md) for the data flow and browser tests.
+Review scheduling uses fixed intervals based on self-assessed mastery. This is
+an independent personal project, not an official LeetCode product.
