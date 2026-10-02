@@ -10,6 +10,10 @@ npm run dev
 Run FastAPI separately from the repository root with `fastapi dev main.py`.
 Open the URL printed by Vite (normally http://127.0.0.1:5173).
 
+## Appearance
+
+The interface defaults to neutral graphite with a muted blue accent. The top-left theme button switches between dark and light palettes and saves the preference in browser local storage (`tracker-theme`). The HTML head applies the saved preference before React loads to avoid a theme flash. If storage is blocked, switching still works for the current page. Mastery badges progress through red (learned), orange (partial recall), yellow (struggle), green (independent), and blue (mastered). Due and overdue countdowns use red. Both palettes use shared semantic CSS variables in `src/index.css`, including dialogs and the practice reader. Mobile controls reflow while the table scrolls horizontally.
+
 ## How data moves
 
 - `src/main.tsx` mounts React in the HTML page.

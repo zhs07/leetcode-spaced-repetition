@@ -1,3 +1,4 @@
+import useModalDialog from './useModalDialog'
 import { createElement, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { masteryLevels, request } from './api'
@@ -26,7 +27,7 @@ function today() {
 }
 
 export default function PracticeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const dialog = useModalDialog()
   const active = useRef(true)
   const pending = useRef(false)
   const initialRequest = useRef<Promise<PracticePick> | null>(null)
@@ -40,14 +41,12 @@ export default function PracticeDialog({ onClose, onSaved }: { onClose: () => vo
 
   useEffect(() => {
     active.current = true
-    const element = dialog.current!
-    element.showModal()
     // StrictMode replays effects; share one request for the initial draw.
     initialRequest.current ??= request<PracticePick>('/practice/random', undefined, 'POST')
     initialRequest.current.then(data => { if (active.current) setPick(data) })
       .catch(failure => { if (active.current) setError(failure instanceof Error ? failure.message : 'Could not pick a problem.') })
       .finally(() => { if (active.current) setBusy(null) })
-    return () => { active.current = false; element.close() }
+    return () => { active.current = false }
   }, [])
 
   async function run(operation: 'pick' | 'statement' | 'details' | 'save', action: () => Promise<void>) {
@@ -106,30 +105,30 @@ export default function PracticeDialog({ onClose, onSaved }: { onClose: () => vo
     event.preventDefault()
     if (busy !== 'save' && busy !== 'statement') onClose()
   }}>
-    <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 pb-4">
+    <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line pb-4">
       <div><p className="eyebrow">Blind practice</p><h2 id="practice-title" className="text-2xl font-semibold mt-2">Practice problem</h2></div>
       <button className="icon-button" aria-label="Close practice" disabled={busy === 'save' || busy === 'statement'} onClick={onClose}>×</button>
     </div>
     <div className="practice-content">
-      {busy === 'pick' && <p role="status" className="py-12 text-center text-sm text-slate-500">Picking a due problem and loading its statement…</p>}
+      {busy === 'pick' && <p role="status" className="py-12 text-center text-sm text-muted">Picking a due problem and loading its statement…</p>}
       {pick?.statement && <article className="problem-statement" aria-label="Problem statement">{renderStatement(pick.statement)}</article>}
       {pick && !pick.statement && <div className="space-y-4 py-4">
-        <p role="status" className="text-sm leading-6 text-slate-600">{pick.statement_error}</p>
+        <p role="status" className="text-sm leading-6 text-muted">{pick.statement_error}</p>
         <button className="secondary" disabled={busy !== null} onClick={retryStatement}>{busy === 'statement' ? 'Loading…' : 'Retry statement'}</button>
-        <form onSubmit={saveStatement} className="space-y-3 border-t border-slate-100 pt-4">
-          <p className="text-xs leading-5 text-slate-500">Reveal details to find the problem, then paste its statement, examples, and constraints once. Future picks will use the saved copy.</p>
+        <form onSubmit={saveStatement} className="space-y-3 border-t border-line pt-4">
+          <p className="text-xs leading-5 text-muted">Reveal details to find the problem, then paste its statement, examples, and constraints once. Future picks will use the saved copy.</p>
           <label>Paste problem statement<textarea rows={7} value={pastedText} onChange={event => setPastedText(event.target.value)} disabled={busy !== null} required maxLength={100000} /></label>
           <button className="primary" disabled={busy !== null || !pastedText.trim()}>Save statement</button>
         </form>
       </div>}
       {showDetails && details && <section className="practice-details" aria-label="Revealed details">
         <h3 className="font-semibold">#{details.number} {details.name}</h3>
-        <p className="mt-2 text-sm text-slate-500">{details.difficulty} · {details.topic} · {details.mastery_level ?? 'Not reviewed'} · {details.attempts} {details.attempts === 1 ? 'attempt' : 'attempts'}</p>
-        <p className="mt-2 text-sm text-slate-500">Next review: {details.next_review ?? 'Not scheduled'}{details.archived ? ' · Archived' : ''}</p>
+        <p className="mt-2 text-sm text-muted">{details.difficulty} · {details.topic} · {details.mastery_level ?? 'Not reviewed'} · {details.attempts} {details.attempts === 1 ? 'attempt' : 'attempts'}</p>
+        <p className="mt-2 text-sm text-muted">Next review: {details.next_review ?? 'Not scheduled'}{details.archived ? ' · Archived' : ''}</p>
         {pick?.leetcode_url && <a className="text-button inline-block mt-3" href={pick.leetcode_url} target="_blank" rel="noreferrer">Open on LeetCode ↗</a>}
-        {details.notes && <details className="mt-3"><summary className="text-button cursor-pointer">Show notes</summary><p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-600">{details.notes}</p></details>}
+        {details.notes && <details className="mt-3"><summary className="text-button cursor-pointer">Show notes</summary><p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">{details.notes}</p></details>}
       </section>}
-      {showAttempt && pick?.statement && <form onSubmit={saveAttempt} className="space-y-4 border-t border-slate-100 pt-5 mt-5">
+      {showAttempt && pick?.statement && <form onSubmit={saveAttempt} className="space-y-4 border-t border-line pt-5 mt-5">
         <h3 className="font-semibold">Record this attempt</h3>
         <fieldset className="grid gap-4 sm:grid-cols-2" disabled={busy !== null}>
           <label>Completion date<input name="reviewed_on" type="date" defaultValue={today()} required /></label>
@@ -142,7 +141,7 @@ export default function PracticeDialog({ onClose, onSaved }: { onClose: () => vo
       </form>}
       {error && <p role="alert" className="error mt-4">{error}</p>}
     </div>
-    <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-slate-100 pt-4 mt-4">
+    <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-line pt-4 mt-4">
       <button className="secondary mr-auto" disabled={busy !== null} onClick={pickAnother}>{pick ? 'Pick another' : 'Try again'}</button>
       {pick && <button className="secondary" disabled={busy !== null} onClick={reveal}>{busy === 'details' ? 'Loading…' : showDetails ? 'Hide details' : 'Reveal details'}</button>}
       {pick?.statement && <button className="primary" disabled={busy !== null || showAttempt} onClick={() => setShowAttempt(true)}>Record attempt</button>}

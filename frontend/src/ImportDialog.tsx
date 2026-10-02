@@ -1,3 +1,4 @@
+import useModalDialog from './useModalDialog'
 import { useEffect, useRef, useState } from 'react'
 import { request } from './api'
 import type { ImportPreview, ImportResult } from './api'
@@ -6,7 +7,7 @@ export default function ImportDialog({ onClose, onImported }: {
   onClose: () => void;
   onImported: (result: ImportResult) => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const dialog = useModalDialog()
   const [file, setFile] = useState<File | null>(null)
   const [csvText, setCsvText] = useState('')
   const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -18,9 +19,7 @@ export default function ImportDialog({ onClose, onImported }: {
 
   useEffect(() => {
     active.current = true
-    const element = dialog.current!
-    element.showModal()
-    return () => { active.current = false; element.close() }
+    return () => { active.current = false }
   }, [])
 
   async function loadPreview() {
@@ -65,7 +64,7 @@ export default function ImportDialog({ onClose, onImported }: {
       <div>
         <p className="eyebrow">Bring your practice history</p>
         <h2 id="import-title" className="text-2xl font-semibold mt-2">Import from Notion</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">Choose your exported CSV, check the preview, then confirm the import.</p>
+        <p className="mt-2 text-sm leading-6 text-muted">Choose your exported CSV, check the preview, then confirm the import.</p>
       </div>
       <button className="icon-button" aria-label="Close import" disabled={busy !== null} onClick={onClose}>×</button>
     </div>
@@ -77,16 +76,16 @@ export default function ImportDialog({ onClose, onImported }: {
           setPreview(null); setCsvText(''); setError('')
         }} />
       </label>
-      <p className="text-xs leading-5 text-slate-500">Use the fuller export ending in _all.csv when available. Existing problem numbers will be skipped, keeping their notes and history.</p>
+      <p className="text-xs leading-5 text-muted">Use the fuller export ending in _all.csv when available. Existing problem numbers will be skipped, keeping their notes and history.</p>
       {!preview && <button className="secondary" disabled={!file || busy !== null} onClick={() => void loadPreview()}>{busy === 'preview' ? 'Reading CSV…' : 'Preview import'}</button>}
     </div>
 
     {preview && <div className="mt-6 space-y-4">
       <div className="import-summary" role="status">
-        <strong className="text-slate-800">{preview.problems.length} valid {preview.problems.length === 1 ? 'problem' : 'problems'}</strong>
+        <strong className="text-strong">{preview.problems.length} valid {preview.problems.length === 1 ? 'problem' : 'problems'}</strong>
         <span>{preview.errors.length} invalid {preview.errors.length === 1 ? 'row' : 'rows'} · {preview.skipped_rows} empty {preview.skipped_rows === 1 ? 'row' : 'rows'} skipped</span>
       </div>
-      <p className="text-sm leading-6 text-slate-500">Nothing has been saved yet. Import preserves total attempts and the latest review; next review dates follow the app’s schedule.</p>
+      <p className="text-sm leading-6 text-muted">Nothing has been saved yet. Import preserves total attempts and the latest review; next review dates follow the app’s schedule.</p>
 
       {preview.errors.length > 0 && <div className="import-errors">
         <h3 className="font-semibold">Rows that won’t be imported</h3>
@@ -102,10 +101,10 @@ export default function ImportDialog({ onClose, onImported }: {
           <tbody>{preview.problems.map(item => <tr key={item.problem.number}>
             <th scope="row">
               <p className="font-semibold">#{item.problem.number} {item.problem.name}</p>
-              <p className="mt-1 font-normal text-xs text-slate-500">{item.problem.difficulty} · {item.problem.topic}</p>
+              <p className="mt-1 font-normal text-xs text-muted">{item.problem.difficulty} · {item.problem.topic}</p>
               {item.problem.notes && <details className="mt-2 font-normal">
                 <summary className="text-button cursor-pointer">Show notes</summary>
-                <p className="mt-2 whitespace-pre-wrap break-words text-slate-500">{item.problem.notes}</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-muted">{item.problem.notes}</p>
               </details>}
             </th>
             <td className="whitespace-nowrap">{item.problem.first_attempt?.reviewed_on}</td>
@@ -113,12 +112,12 @@ export default function ImportDialog({ onClose, onImported }: {
             <td className="font-mono">{item.total_attempts}</td>
           </tr>)}</tbody>
         </table>
-      </div> : <p className="text-sm text-slate-600">No valid problems to import. Correct the reported rows or choose another file.</p>}
+      </div> : <p className="text-sm text-muted">No valid problems to import. Correct the reported rows or choose another file.</p>}
     </div>}
 
     {error && <p role="alert" className="error mt-4">{error}</p>}
     </div>
-    <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-slate-100 pt-4 mt-4">
+    <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-line pt-4 mt-4">
       <button className="secondary" disabled={busy !== null} onClick={onClose}>Cancel</button>
       {preview && <button className="primary" disabled={busy !== null || preview.problems.length === 0} onClick={() => void save()}>
         {busy === 'save' ? 'Importing…' : `Import ${preview.problems.length} valid ${preview.problems.length === 1 ? 'problem' : 'problems'}`}
