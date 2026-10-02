@@ -86,6 +86,12 @@ With the virtual environment active:
 ```bash
 python -m pytest
 ```
+
+The PostgreSQL deployment storage has a separate real-database integration
+suite. See [the deployment guide](deployment.md#implemented-postgresql-milestone)
+for prerequisites and its disposable database setup. Those tests skip when
+PostgreSQL binaries are unavailable; the local API still uses SQLite.
+
 ## Frontend development
 
 Requires Node.js 24 LTS and npm. Keep FastAPI running in one terminal.
