@@ -36,6 +36,19 @@ export function finishRecovery() {
   window.history.replaceState({}, '', window.location.pathname)
   update({ recovering: false, error: '' })
 }
+export function dismissAuthError() {
+  update({ error: '' })
+}
+
+function emailLinkError(code: string | undefined, recovering: boolean) {
+  const label = recovering ? 'password-reset link' : 'email link'
+  if (code === 'otp_expired' || code === 'flow_state_expired') {
+    return `This ${label} is invalid or expired. Please request a new one.`
+  }
+  return recovering
+    ? "We couldn't open this password-reset link. Request a new reset link and open it in the same browser that requested it."
+    : "We couldn't finish signing you in from this email link. Your email may already be confirmed; try signing in with your email and password. If confirmation is still required, request a new link and open it in the same browser where you signed up."
+}
 
 // Initialize once, outside React's StrictMode effect replay. Handle PKCE codes
 // explicitly so expired links produce a visible error instead of a blank page.
@@ -53,15 +66,16 @@ if (supabase) {
     try {
       const params = new URLSearchParams(window.location.search)
       const fragment = new URLSearchParams(window.location.hash.slice(1))
+      const recovering = params.get('auth') === 'recovery'
       if (params.has('error') || fragment.has('error')) {
+        const code = params.get('error_code') || fragment.get('error_code') || undefined
         window.history.replaceState({}, '', window.location.pathname)
-        throw new Error('This email link is invalid or expired. Please request a new one.')
+        throw new Error(emailLinkError(code, recovering))
       }
       if (params.has('code')) {
-        const recovering = params.get('auth') === 'recovery'
         const { data, error } = await client.auth.exchangeCodeForSession(params.get('code')!)
         window.history.replaceState({}, '', authRedirect(recovering))
-        if (error) throw new Error('This email link is invalid or expired. Open a new link in the same browser that requested it.')
+        if (error) throw new Error(emailLinkError(error.code, recovering))
         update({ session: data.session, recovering })
       } else {
         const { data, error } = await client.auth.getSession()

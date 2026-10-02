@@ -28,8 +28,10 @@ class TokenVerifier:
                 issuer=self.issuer, audience="authenticated",
                 options={"require": ["exp", "iat", "iss", "aud", "sub", "role"]},
             )
-            if claims["role"] != "authenticated" or claims.get("is_anonymous", False) is not False:
-                raise ValueError("A signed-in account is required")
+            # Anonymous sign-in still supplies a signed, authenticated UUID.
+            # Guests use exactly the same owner-scoped store as permanent users.
+            if claims["role"] != "authenticated" or type(claims.get("is_anonymous", False)) is not bool:
+                raise ValueError("An authenticated account is required")
             user_id = UUID(claims["sub"])
             if user_id.int == 0:
                 raise ValueError("Invalid subject")

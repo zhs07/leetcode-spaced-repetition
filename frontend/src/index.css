@@ -85,6 +85,9 @@
   .auth-shell { max-width: 500px; margin: 64px auto; padding: 0 20px; }
   .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
   .account-bar { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; max-width: 1440px; margin: auto; padding: 12px 36px 0; font-size: 13px; overflow-wrap: anywhere; }
+  .preview-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; max-width: 1368px; margin: 24px 36px 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 13px; }
+  .preview-error { flex-basis: 100%; }
+  @media (min-width: 1440px) { .preview-bar { margin-inline: auto; } }
   .app-shell { max-width: 1440px; margin: 0 auto; padding: 0 36px 28px; }
   .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 76px; border-bottom: 1px solid var(--line); }
   .theme-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 12px; padding: 8px 10px; margin-left: -10px; border-radius: 7px; color: var(--muted); }
@@ -175,6 +178,8 @@
   .problem-statement table { display: block; max-width: 100%; overflow-x: auto; }
   @media (max-width: 1100px) { .page-header { align-items: flex-start; flex-direction: column; gap: 24px; } }
   @media (max-width: 700px) {
+    .preview-bar { margin: 16px 16px 0; }
+    .account-bar { padding-inline: 16px; }
     .app-shell { padding: 0 16px 24px; }
     .topbar { min-height: 64px; }
     .brand { font-size: 11px; }

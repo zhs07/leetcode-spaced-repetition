@@ -36,11 +36,22 @@ The interface defaults to neutral graphite with a muted blue accent. The top-lef
 
 The proxy is for local development. A production deployment must route `/api` to FastAPI separately; `npm run build` does not deploy the app or include the Python server.
 
-## Email authentication
+## Guest access and email authentication
 
 `AuthGate.tsx` wraps the tracker in hosted mode. `auth.ts` uses the Supabase SDK
 for email/password sign-in, sign-up confirmation, PKCE callback handling, password
-recovery, and refreshed sessions. Account changes remount the tracker and clear
+recovery, anonymous guest sign-in, and refreshed sessions. Signed-out visitors
+see `App` in preview mode with handwritten examples from `sampleProblems.ts`;
+this mode makes no tracker API requests. Try as guest creates a private empty
+workspace using the existing API. Sample action buttons also start a guest;
+filters and notes remain interactive in the sample view.
+
+Guest sessions return in the same browser until its session/storage is lost.
+Signing into a permanent account replaces the guest session without transferring
+records; the form explains this before submission. Guest sign-in is enabled and
+real guest save/reload has been verified. Evidence, temporary verification server
+commands, and remaining public-launch abuse controls are in the deployment guide.
+Account changes remount the tracker and clear
 its state; API requests attach the current access token and reject stale responses.
 
 Vite development defaults to local mode. Production builds default to hosted

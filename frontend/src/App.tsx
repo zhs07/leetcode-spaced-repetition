@@ -5,6 +5,7 @@ import { masteryLevels, request } from './api'
 import type { ProblemSummary } from './api'
 import ImportDialog from './ImportDialog'
 import PracticeDialog from './PracticeDialog'
+import { sampleProblems } from './sampleProblems'
 
 function localToday() {
   const now = new Date()
@@ -131,7 +132,7 @@ function DeleteDialog({ problem, onClose, onDeleted }: { problem: ProblemSummary
   </dialog>
 }
 
-export default function App() {
+export default function App({ preview = false, onStartGuest }: { preview?: boolean; onStartGuest?: () => void }) {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark')
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -145,8 +146,8 @@ export default function App() {
     window.addEventListener('focus', update)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', update) }
   }, [])
-  const [problems, setProblems] = useState<ProblemSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [problems, setProblems] = useState<ProblemSummary[]>(() => preview ? sampleProblems(localToday()) : [])
+  const [loading, setLoading] = useState(!preview)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [noticeView, setNoticeView] = useState<'all' | 'archived' | null>(null)
@@ -196,6 +197,7 @@ export default function App() {
   }
   const latestRequest = useRef(0)
   async function refresh() {
+    if (preview) { setProblems(sampleProblems(localToday())); return }
     const id = ++latestRequest.current
     setLoading(true); setError('')
     try {
@@ -206,17 +208,19 @@ export default function App() {
     finally { if (id === latestRequest.current) setLoading(false) }
   }
   useEffect(() => {
+    if (preview) return
     let active = true
     request<ProblemSummary[]>('/problems/summary')
       .then(data => { if (active) setProblems(data) })
       .catch(failure => { if (active) setError(failure instanceof Error ? failure.message : 'Could not load your problems.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [preview])
   function toggleNotes(number: number) {
     setVisibleNotes(previous => { const next = new Set(previous); if (next.has(number)) next.delete(number); else next.add(number); return next })
   }
   async function changeArchive(problem: ProblemSummary) {
+    if (preview) { onStartGuest?.(); return }
     if (archivePending !== null || loading) return
     const action = problem.archived ? 'restore' : 'archive'
     setArchivePending(problem.number); setActionError(''); setNotice(''); setNoticeView(null)
@@ -247,18 +251,18 @@ export default function App() {
     </div>
     <header className="page-header">
       <div>
-        <h1>Your review space</h1>
+        <h1>{preview ? 'Sample review space' : 'Your review space'}</h1>
         <p className="header-description">Practice, track, and revisit LeetCode problems for technical interviews and online assessments.</p>
       </div>
       <div className="header-actions">
-        <button className="primary practice-button" disabled={loading || archivePending !== null} onClick={() => setPracticeOpen(true)}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m17 3 4 4-4 4M3 17h3c5 0 7-10 12-10h3M17 13l4 4-4 4M3 7h3c2 0 3 1 4 3m4 4c1 2 2 3 4 3h3" /></svg>Random pick</button>
-        <button className="secondary" disabled={archivePending !== null} onClick={() => setEditor({ kind: 'problem' })}><span aria-hidden="true">＋ </span>Add problem</button>
-        <button className="quiet-button" disabled={loading || archivePending !== null} onClick={() => setImportOpen(true)}>Import CSV</button>
+        <button className="primary practice-button" disabled={loading || archivePending !== null} onClick={() => preview ? onStartGuest?.() : setPracticeOpen(true)}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m17 3 4 4-4 4M3 17h3c5 0 7-10 12-10h3M17 13l4 4-4 4M3 7h3c2 0 3 1 4 3m4 4c1 2 2 3 4 3h3" /></svg>Random pick</button>
+        <button className="secondary" disabled={archivePending !== null} onClick={() => preview ? onStartGuest?.() : setEditor({ kind: 'problem' })}><span aria-hidden="true">＋ </span>Add problem</button>
+        <button className="quiet-button" disabled={loading || archivePending !== null} onClick={() => preview ? onStartGuest?.() : setImportOpen(true)}>Import CSV</button>
       </div>
     </header>
     <section aria-labelledby="table-title" className="table-card">
       <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b border-line">
-        <div className="flex items-center gap-3"><h2 id="table-title" className="font-semibold">{view === 'archived' ? 'Archived problems' : 'Your problems'}</h2><span className="count">{scopeProblems.length}</span></div>
+        <div className="flex items-center gap-3"><h2 id="table-title" className="font-semibold">{view === 'archived' ? 'Archived problems' : preview ? 'Sample problems' : 'Your problems'}</h2><span className="count">{scopeProblems.length}</span></div>
         <button className="text-button" onClick={() => { setNotice(''); setNoticeView(null); setActionError(''); void refresh() }} disabled={loading || archivePending !== null}>{loading ? 'Refreshing…' : 'Refresh'}</button>
       </div>
       <div className="border-b border-line bg-surface-soft px-6 py-4">
@@ -282,7 +286,7 @@ export default function App() {
         problems.length === 0 && !error && view !== 'archived' ? <div className="empty-state">
           <div className="empty-icon" aria-hidden="true">&lt;/&gt;</div><h3 className="text-xl font-semibold text-strong mt-5">A fresh start for your practice</h3>
           <p className="mt-2">Add a problem with your first attempt, or save it to practice later.</p>
-          <button className="text-button mt-5" onClick={() => setEditor({ kind: 'problem' })}>Add your first problem →</button>
+          <button className="text-button mt-5" onClick={() => preview ? onStartGuest?.() : setEditor({ kind: 'problem' })}>Add your first problem →</button>
         </div> : scopeProblems.length === 0 && !error ? <div className="empty-state"><h3 className="text-lg font-semibold text-strong">{view === 'archived' ? 'No archived problems' : 'Your active list is clear'}</h3><p className="mt-2">{view === 'archived' ? 'Problems you archive will appear here with their history.' : 'Your saved problems are archived. Restore one whenever you want to practice it again.'}</p><button className="text-button mt-4" onClick={() => changeView(view === 'archived' ? 'all' : 'archived')}>{view === 'archived' ? 'View active problems' : 'View archived'}</button></div> : scopeProblems.length > 0 && shownProblems.length === 0 ? <div className="empty-state"><h3 className="text-lg font-semibold text-strong">No matching problems</h3><p className="mt-2">Try another filter combination to see more of your list.</p><button className="text-button mt-4" onClick={clearFilters}>{view === 'archived' ? 'Show archived problems' : 'Show active problems'}</button></div> : scopeProblems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
           <table className="problems-table"><thead><tr>{['#', 'Problem', 'Difficulty', 'Topic', 'Mastery', 'Next review', 'Attempts', 'Notes', 'Actions'].map(title => <th key={title} scope="col">{title}</th>)}</tr></thead>
             <tbody>{shownProblems.map(problem => <Fragment key={problem.number}><tr>
@@ -293,10 +297,10 @@ export default function App() {
               <td className="font-mono">{problem.attempts}</td>
               <td>{problem.notes ? <button className="text-button whitespace-nowrap" aria-expanded={visibleNotes.has(problem.number)} aria-controls={`notes-${problem.number}`} onClick={() => toggleNotes(problem.number)}>{visibleNotes.has(problem.number) ? 'Hide notes' : 'Show notes'}</button> : <span className="text-faint">No notes</span>}</td>
               <td><div className="flex flex-col items-start gap-2">
-                {!problem.archived && <button className="row-button" disabled={loading || archivePending !== null} onClick={() => setEditor({ kind: 'attempt', problem })} aria-label={`Record attempt for ${problem.name}`}>Record attempt</button>}
+                {!problem.archived && <button className="row-button" disabled={loading || archivePending !== null} onClick={() => preview ? onStartGuest?.() : setEditor({ kind: 'attempt', problem })} aria-label={`Record attempt for ${problem.name}`}>Record attempt</button>}
                 <div className="flex items-center gap-1">
                   <button className={problem.archived ? 'row-button' : 'archive-link'} disabled={loading || archivePending !== null} onClick={() => void changeArchive(problem)} aria-label={`${problem.archived ? 'Restore' : 'Archive'} ${problem.name}`} title={problem.archived ? 'Resume reviews; this problem becomes due immediately.' : 'Pause reviews and keep your history.'}>{archivePending === problem.number ? problem.archived ? 'Restoring…' : 'Archiving…' : problem.archived ? 'Restore' : 'Archive'}</button>
-                  <button className="delete-link" disabled={loading || archivePending !== null} aria-label={`Delete ${problem.name}`} onClick={() => { setNotice(''); setNoticeView(null); setActionError(''); setDeleteTarget(problem) }}>Delete</button>
+                  <button className="delete-link" disabled={loading || archivePending !== null} aria-label={`Delete ${problem.name}`} onClick={() => { setNotice(''); setNoticeView(null); setActionError(''); if (preview) onStartGuest?.(); else setDeleteTarget(problem) }}>Delete</button>
                 </div>
               </div></td>
             </tr>{visibleNotes.has(problem.number) && <tr id={`notes-${problem.number}`}><td colSpan={9} className="notes-cell"><p className="eyebrow mb-2">Your notes · {problem.name}</p><p className="whitespace-pre-wrap break-words max-w-3xl">{problem.notes}</p></td></tr>}</Fragment>)}</tbody>

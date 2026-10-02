@@ -1,0 +1,48 @@
+# Review docs/deployment.md before creating this Blueprint.
+# Service creation performs an initial public deploy even with auto-deploys off.
+# Provide the actual HTTPS service URLs and secrets in the Render dashboard.
+services:
+  - type: web
+    name: leetcode-tracker-api
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    autoDeployTrigger: "off"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.14.3"
+      - key: TRACKER_MODE
+        value: hosted
+      - key: TRACKER_DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: TRACKER_ALLOWED_ORIGINS
+        sync: false
+
+  - type: web
+    name: leetcode-tracker-web
+    runtime: static
+    branch: main
+    autoDeployTrigger: "off"
+    buildCommand: npm --prefix frontend ci && npm --prefix frontend run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: NODE_VERSION
+        value: "24.21.0"
+      - key: VITE_TRACKER_MODE
+        value: hosted
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_API_BASE_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -44,10 +44,16 @@ def test_verified_subject_is_identity(signing):
     assert TokenVerifier(PROJECT).verify(signing(owner)) == owner
 
 
+def test_guest_has_a_verified_individual_identity(signing):
+    owner = uuid4()
+    assert TokenVerifier(PROJECT).verify(signing(owner, is_anonymous=True)) == owner
+
+
 @pytest.mark.parametrize("overrides", [
     {"exp": 1}, {"iss": "https://another-project.supabase.co/auth/v1"},
     {"aud": "anon"}, {"role": "service_role"}, {"sub": "not-a-uuid"},
-    {"sub": "00000000-0000-0000-0000-000000000000"}, {"is_anonymous": True},
+    {"sub": "00000000-0000-0000-0000-000000000000"}, {"is_anonymous": "true"},
+    {"is_anonymous": None}, {"is_anonymous": 1},
     {"iat": 9999999999}, {"nbf": 9999999999}, {"exp": None},
 ])
 def test_invalid_claims_rejected(signing, overrides):
@@ -132,10 +138,11 @@ def test_every_tracker_route_requires_valid_auth(hosted_client, signing):
     assert hosted_client.get("/health").json() == {"status": "ok"}
 
 
-def test_http_ownership_and_same_number_workflow(hosted_client, signing):
+@pytest.mark.parametrize("anonymous, other_anonymous", [(False, False), (True, False), (True, True)])
+def test_http_ownership_and_same_number_workflow(hosted_client, signing, anonymous, other_anonymous):
     alice_id, bob_id = uuid4(), uuid4()
-    alice = {"Authorization": "Bearer " + signing(alice_id)}
-    bob = {"Authorization": "Bearer " + signing(bob_id)}
+    alice = {"Authorization": "Bearer " + signing(alice_id, is_anonymous=anonymous)}
+    bob = {"Authorization": "Bearer " + signing(bob_id, is_anonymous=other_anonymous)}
     payload = {"number": 1, "name": "Example", "difficulty": "Easy", "topic": "Arrays", "notes": "Bob note", "user_id": str(alice_id)}
     assert hosted_client.post("/problems", json=payload, headers=bob).status_code == 201
     # Body owner is ignored: the token, not request JSON, controls ownership.

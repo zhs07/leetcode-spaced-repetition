@@ -29,8 +29,9 @@ changing the plan or provisioning additional resources.
   schema returned HTTP 406 / `PGRST106`; only `public` and `graphql_public` were
   exposed. A real authenticated REST probe is still pending. Security advisors
   returned no findings. No personal records were imported.
-- Verified email sign-in and confirmation are enabled, anonymous sign-ins are
-  disabled, and the public JWKS advertises an ES256 key. Saved an eight-character
+- Verified email sign-in and confirmation are enabled, and the public JWKS
+  advertises an ES256 key. Anonymous sign-ins were disabled at initial setup;
+  they were later enabled with approval and verified below. Saved an eight-character
   minimum password setting in the dashboard.
 - Set Site URL to `http://127.0.0.1:5173/` and verified both that URL and
   `http://127.0.0.1:5173/?auth=recovery` in the redirect allowlist.
@@ -86,10 +87,205 @@ Ordinary email/password sign-in then succeeded. The protected hosted
 The signed-in session also survived a page reload. Do not ask this user to
 register again to resolve the earlier callback error.
 
-Still required: SMTP for public sign-up; reliable confirmation callback and
-recovery checks; two-real-account isolation tests; persistence checks; and
-hosting. The later configuration
-checklist describes the full setup, including steps now completed above.
+Later live verification on October 2 found 68 problems, 68 review rows, and one
+cached statement for one owner in Supabase. The signed-in frontend displayed
+all 68 active problems. After a controlled restart of only the hosted backend
+on port 8001 and a page reload, every displayed table row matched the baseline,
+including attempts, mastery, and review dates; the account stayed signed in.
+This verifies persistence of the existing collection across backend restarts.
+No records were added, modified, or deleted during this check, and the original
+SQLite backend and personal database were left untouched. The earlier
+empty-table smoke-test result describes the state before these records existed.
+
+Callback errors now distinguish provider-reported expiry from other exchange
+failures. For an unsuccessful confirmation exchange, the UI suggests trying
+ordinary sign-in because the email may already be confirmed. Failed recovery
+links instead suggest requesting a new reset link. The cause of the earlier
+live callback incident remains unverified; improved messages do not establish
+that the underlying live confirmation/recovery flows are reliable.
+
+Frontend build, lint, and all 13 mocked auth browser tests passed after this
+change. The tests separately exercise provider-reported expiry, a failed code
+exchange, a missing browser verifier, and successful confirmation/recovery.
+They do not send real email or replace the remaining live-account checks.
+
+Still required: guest abuse controls and cleanup before public launch; SMTP for
+public email sign-up; live confirmation callback and recovery
+checks; two-real-account isolation tests; an authenticated Data API rejection
+probe; full database certificate/hostname verification; and hosting. The later
+configuration checklist describes the full setup, including completed steps.
+
+## Fully free launch preparation
+
+The user selected a fully free setup on October 2. Keep the existing Supabase
+project on Free, use Render's free static site and free web service, and use
+their supplied HTTPS subdomains. No domain purchase is required for hosting.
+Avoid adding a payment method or upgrading any plan during this setup. Render
+documents suspension/build limits when included usage is exhausted without a
+payment method; the backend also sleeps after 15 idle minutes and can take
+about a minute to wake. See [Render Free](https://render.com/docs/free).
+
+Email delivery remains unresolved. A free sending allowance does not establish
+that an account can send reliable authentication email without a domain:
+
+- [Resend](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)
+  limits its test domain to the account owner's address; other recipients need
+  an owned, verified domain.
+- [SMTP2GO](https://www.smtp2go.com/blog/smtp2go-questions-answered/)
+  has a free plan but does not allow Gmail/Yahoo addresses at signup.
+- [Mailjet](https://documentation.mailjet.com/hc/en-us/articles/360042759253-How-to-add-a-sender-address)
+  permits individual sender verification but warns that freemail senders can
+  fail delivery. This has not been provisioned or tested for this project.
+
+The recommended domain-free alternative is
+[GitHub sign-in through Supabase](https://supabase.com/docs/guides/auth/social-login/auth-github).
+This would let public users sign in with GitHub instead of receiving signup or
+password-reset email from the tracker. It is a proposed login choice, not yet
+selected, implemented, or configured. Preserve the existing email account and
+its owner UUID/records. Linking the developer's GitHub account to Supabase or
+Render is separate from configuring GitHub as a tracker login provider.
+
+### Prepared Render Blueprint
+
+`render.yaml` defines the two hosting services with automatic deploys disabled,
+the API explicitly on `plan: free`, and dashboard prompts for configuration.
+It creates no Render database, disk, or migration job. Creating a Blueprint
+still triggers an initial public deployment: do not apply it until the
+remaining live isolation, authentication, and database TLS checks are complete.
+No Render resources have been created during this preparation.
+
+| Service | Dashboard value | How to fill it |
+| --- | --- | --- |
+| API | `TRACKER_DATABASE_URL` | Restricted runtime-role session-pooler URL with the verified TLS configuration; never migration/admin credentials |
+| API | `SUPABASE_URL` | Existing Supabase HTTPS project origin |
+| API | `TRACKER_ALLOWED_ORIGINS` | Actual frontend HTTPS origin, without a trailing slash; add the local origin only if intentionally testing it |
+| Frontend | `VITE_SUPABASE_URL` | Same Supabase HTTPS project origin |
+| Frontend | `VITE_SUPABASE_PUBLISHABLE_KEY` | Public publishable key only |
+| Frontend | `VITE_API_BASE_URL` | Actual API HTTPS origin, without `/api` or a trailing slash |
+
+Use the actual URLs assigned by Render instead of guessing them from the
+service names. Review these values before the initial deploy; changing a
+`VITE_*` value requires rebuilding the frontend. Add the final frontend URL
+and exact callback URLs to Supabase's redirect allowlist before testing public
+login. Do not copy the Mac-specific `SSL_CERT_FILE` path to Render or upload
+the local `.env` file. Python/Node versions and Blueprint fields follow
+[Render's configuration reference](https://render.com/docs/blueprint-spec).
+This file is prepared locally; a real Render build/start has not yet verified
+the selected runtime versions and dependency installation.
+
+## Guest access decision and implementation
+
+On October 2 the user chose guest access and authorized selecting the simplest
+free implementation. Selected **Supabase anonymous sign-in**. Browser-only guest
+storage also has no service fee, but would require a second implementation of
+the Python scheduling, imports, statement retrieval, and storage operations.
+Supabase guests reuse the existing verified-token and owner-scoped PostgreSQL
+path. No new packages, migrations, paid plans, or OAuth providers were added.
+The permanent public login choice remains unresolved; existing email login is
+preserved.
+
+The hosted landing flow now works as follows:
+
+1. Restore an existing session if present. Otherwise show the real tracker UI
+   with three clearly labeled, handwritten sample problems. Filtering, sorting,
+   notes, and theme switching work without any tracker API requests. Viewing the
+   samples creates no auth user or database rows.
+2. **Try as guest** calls `supabase.auth.signInAnonymously()` on demand. Sample
+   action buttons also start a fresh guest workspace; the sample records are
+   never saved into it. A guest starts with an empty private collection.
+3. The SDK retains and refreshes the guest session in this browser. FastAPI
+   still verifies signature, issuer, audience, expiry, role, and UUID subject.
+   Only the rejection of valid anonymous accounts changed. Guests have their
+   own UUIDs and use the same ownership predicates as permanent accounts.
+4. **Sign in** opens the existing account form. Guests can go back without
+   replacing their session. The form explains that successful account sign-in
+   replaces guest access and does not transfer guest records. Guest-to-account
+   identity linking or merging has not been implemented.
+
+Clearing browser data, losing the session, or signing into another account can
+lose access to the guest collection. No cross-device recovery is promised.
+Supabase is cloud storage, while browser-only guests store their records on the
+device. Both can cost $0; Supabase usage remains subject to the project's Free
+quotas. See [pricing](https://supabase.com/pricing) and
+[anonymous sign-ins](https://supabase.com/docs/guides/auth/auth-anonymous).
+
+After explicit user approval on October 2, enabled and saved **Allow anonymous
+sign-ins** in the live Supabase dashboard. The saved setting and a successful
+real guest sign-in both verified activation. The project remains on Free;
+email confirmation stays **enabled**, and manual identity linking stays
+**disabled**. The anonymous-user rate limit remains 30 sign-ins per hour per IP.
+
+### Real guest save and reload verification
+
+Used a separate local origin `http://127.0.0.1:5176/` and hosted API on port 8002
+to keep browser storage separate from the original frontend on port 5173.
+Both connect to the existing Supabase project; this was a live cloud test,
+not a mocked auth test or a disposable database test. The original backend
+on port 8001 had already been restarted with the updated verifier.
+
+- Opened the sample tracker, then clicked **Try as guest** to create a real
+  anonymous session. The new workspace was empty, without personal or sample
+  records copied into it.
+- Saved synthetic problem #1, **Guest verification: Two Sum**, topic **Guest
+  test**, with a first attempt dated October 2, **Partial Recall**, and clearly
+  labeled synthetic notes. The backend returned HTTP 201; the UI showed one
+  attempt and next review **October 4, 2026**.
+- Revealed the notes, captured the table's visible text, reloaded the page,
+  revealed notes again, and compared the complete table text: exact match.
+  The guest label remained visible, and there were no error alerts. Real
+  authenticated GET requests returned HTTP 200 after reload.
+- A read-only live database aggregate joined owners to `auth.users` and
+  confirmed permanent accounts still had **68 problems and 68 reviews**;
+  the anonymous guest had **one problem and one review**. No personal records
+  were written or deleted. No sign-in/sign-out was performed on the original
+  frontend; it showed the sample preview when inspected afterward.
+- Left the synthetic guest, its test record, and the guest browser session
+  available for further testing. No cleanup or account deletion was performed.
+
+Guest verification servers were left running at completion:
+
+```bash
+# Repository root: isolated guest API; existing ignored .env supplies credentials.
+TRACKER_ALLOWED_ORIGINS=http://127.0.0.1:5176 .venv/bin/python -m uvicorn main:app --env-file .env --host 127.0.0.1 --port 8002
+
+# frontend/: isolated guest browser origin.
+VITE_API_BASE_URL=http://127.0.0.1:8002 npm run dev -- --port 5176 --strictPort
+```
+
+The normal application at port 5173 continues to target the hosted API on 8001.
+No credential/configuration file was modified for this test. A visual proof of
+the guest after reload is saved outside the repository at
+`/private/tmp/leetcode-guest-live-after-reload-2026-10-02.jpg`. Recheck listeners
+before relying on these temporary verification servers in a later session.
+
+Before public guest launch, configure CAPTCHA/Turnstile and pass its token to
+the SDK, verify rate limits, choose guest record/operation limits, and define
+cleanup for both auth users and tracker records. Supabase has no automatic
+anonymous-user cleanup. Tracker rows do not reference `auth.users`, so deleting
+an auth user alone will leave application records. No cleanup job or guest
+limits were implemented in this change; do not apply the Render Blueprint yet.
+
+Verification for this change: frontend build and lint; **20 mocked auth/guest
+browser tests**; **18 existing local tracker browser tests** using disposable
+SQLite; **134 backend tests** including disposable PostgreSQL and guest-to-guest
+and guest-to-permanent-account isolation; `git diff --check`. The browser guest
+tests do not create live Supabase users. All existing callback regression tests
+remain covered. No personal collection, applied migration, or Git branch was
+modified, and no staging/commit/push was performed.
+
+The live security advisor returned one warning for disabled leaked-password
+protection. This feature requires Pro or above according to
+[Supabase password security](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+Retained the Free plan and existing password settings; no table-access finding
+was reported.
+
+Interview explanation: "Visitors needed to see and try the tracker before
+registering. I chose anonymous authentication because it reused our existing
+API and per-user database design, keeping scheduling in one implementation.
+Each guest gets a verified UUID, so avoiding an email form doesn't mean sharing
+data. I separated sample content from saved records, tested isolation and session
+restoration, and made the session-loss tradeoff clear. Public launch also needs
+abuse controls and cleanup to keep resource use within the free allowance."
 
 ## Preserved local version
 
@@ -111,8 +307,9 @@ that version; do not merge deployment changes into it.
 
 - Render static site serves the existing React application.
 - Render web service runs FastAPI and the existing Python scheduling logic.
-- Supabase provides PostgreSQL and authentication. Email sign-in is selected;
-  the working implementation is email/password with verification and recovery.
+- Supabase provides PostgreSQL and authentication. Email/password login with
+  verification and recovery is implemented; anonymous guest login is enabled
+  and real guest save/reload behavior has been verified against the live project.
 - React signs in through Supabase, then sends an access token in the
   `Authorization: Bearer ...` header to FastAPI.
 - FastAPI verifies the token before choosing the user whose records it accesses.
@@ -297,7 +494,8 @@ readiness, not ongoing database or email-provider availability.
 
 `auth.py` verifies ES256/RS256 signatures using the configured project's JWKS,
 with expiry, issuer, audience, issue time, role, and UUID-subject checks.
-Anonymous accounts and legacy HS256 tokens are rejected. Configure asymmetric
+Valid anonymous accounts are accepted with the same UUID ownership checks;
+malformed anonymous claims and legacy HS256 tokens are rejected. Configure asymmetric
 signing keys in Supabase. Public keys are cached for five minutes, and an unknown
 key ID triggers refresh. A key-service outage returns 503; invalid sessions
 return 401. Verification is local after keys are cached: access tokens remain
@@ -332,7 +530,9 @@ npm run test:e2e
 
 1. Create the Supabase project and enable email/password sign-in, email
    confirmation, and a password minimum of at least eight characters. Select
-   asymmetric JWT signing keys supported above. Keep anonymous sign-ins disabled.
+   asymmetric JWT signing keys supported above. Enable anonymous sign-ins for
+   the selected guest flow after confirming the live change, and complete the
+   guest abuse controls and cleanup requirements above before public launch.
 2. Configure SMTP for public confirmation/recovery email. Verify sender/domain
    requirements and free limits before choosing a provider. Do not disable
    confirmation as a workaround for the default sender restriction.
