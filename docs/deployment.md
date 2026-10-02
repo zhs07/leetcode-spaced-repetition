@@ -1,9 +1,95 @@
 # Public deployment plan
 
-Status: PostgreSQL storage and email authentication implemented locally,
-October 2, 2026. Hosted mode connects verified Supabase identities to PostgreSQL.
-Default local development still uses SQLite. No Supabase project or hosting has
-been provisioned; actual email delivery and provider settings remain unverified.
+Status: Supabase project and initial provider configuration completed October 2,
+2026. PostgreSQL storage and email authentication are implemented locally.
+The local hosted backend now connects successfully as the restricted runtime
+role. Real confirmation/recovery flows and public hosting remain unfinished.
+Running without hosted environment settings still selects SQLite.
+
+## Provider setup progress
+
+Project `leetcode-tracker` (`stqydfklcxicvffqoycs`) is active in `us-west-1`.
+Creation was quoted at $0/month and approved by the user; recheck pricing before
+changing the plan or provisioning additional resources.
+
+- Applied the exact contents of `001_user_owned_tracker.sql` through the
+  Supabase connector, wrapped with the schema/history setup from `migrate.py`.
+  Supabase records this as `bootstrap_tracker_schema_and_runtime_role`.
+  The application migration table separately records the original filename and
+  SHA-256 `55d0255b21d2614fd18075e7a563224222c129e9cc09d00996236dbd32615d48`,
+  preserving compatibility with the application's migration runner. Do not
+  replay the bootstrap SQL or modify the applied migration file.
+- Created `tracker_runtime` with the documented table/sequence grants, no schema
+  creation or migration-history writes, and no elevated role attributes. It is
+  now a LOGIN role with a generated random password stored only in the ignored,
+  owner-readable `.env` (mode 0600). Supabase received a SCRAM-SHA-256 verifier;
+  no administrator credentials were used by the application.
+- Verified `anon` and `authenticated` have no schema access or read/write grants
+  on any tracker table. A live anonymous REST request selecting the `tracker`
+  schema returned HTTP 406 / `PGRST106`; only `public` and `graphql_public` were
+  exposed. A real authenticated REST probe is still pending. Security advisors
+  returned no findings. No personal records were imported.
+- Verified email sign-in and confirmation are enabled, anonymous sign-ins are
+  disabled, and the public JWKS advertises an ES256 key. Saved an eight-character
+  minimum password setting in the dashboard.
+- Set Site URL to `http://127.0.0.1:5173/` and verified both that URL and
+  `http://127.0.0.1:5173/?auth=recovery` in the redirect allowlist.
+- Created ignored `frontend/.env.local` with the project URL and public
+  publishable key. Its API URL now explicitly targets `http://127.0.0.1:8001`
+  so a restart cannot accidentally route hosted requests to the original local
+  SQLite server on port 8000. The backend `.env` supplies hosted configuration,
+  the runtime session-pooler URL, and the local certificate bundle path.
+- Python on this Mac initially failed TLS certificate verification fetching the
+  JWKS. The request succeeded with `SSL_CERT_FILE` pointing to the existing
+  `certifi.where()` bundle. Use this when starting the local hosted backend:
+  `SSL_CERT_FILE="$(.venv/bin/python -m certifi)" .venv/bin/python -m uvicorn main:app --env-file .env`.
+  This keeps certificate verification enabled and requires no package install.
+
+The runtime connects through the dashboard-provided session pooler
+`aws-0-us-west-1.pooler.supabase.com:5432` using the username
+`tracker_runtime.stqydfklcxicvffqoycs`. Live checks verified schema compatibility,
+client-to-pooler TLS, and denied schema/migration-history modifications. The
+database-side `pg_stat_ssl` describes the separate pooler-to-database hop; use
+`connection.pgconn.ssl_in_use` to inspect the local client connection.
+The application currently uses `sslmode=require`; a separate `verify-full`
+probe using the public certifi bundle failed certificate validation. Full
+database certificate/hostname verification is not yet configured.
+
+A live storage smoke test used two generated owner UUIDs and verified separate
+records for the same number, reviews, statements, archive/delete isolation, and
+cascading deletion. All synthetic rows were removed and all three data tables
+were verified empty afterward. This is storage-layer evidence, not a test of
+two real authenticated users. The running backend returned 200 for `/health`
+and 401 for unauthenticated `/problems`.
+
+Local hosted integration startup (two terminals):
+
+```bash
+# Repository root; .env already includes SSL_CERT_FILE on this Mac.
+.venv/bin/python -m uvicorn main:app --env-file .env --host 127.0.0.1 --port 8001
+
+# frontend/; .env.local explicitly selects backend port 8001.
+npm run dev -- --port 5173 --strictPort
+```
+
+The original SQLite backend on port 8000 was left running separately. The
+frontend was restarted and the real Supabase account-creation form was opened;
+the user must enter their own account password. No sign-up email was sent by
+the assistant. GitHub account linking was reported by the user; repository
+integration has not been configured.
+
+The first real account received its confirmation email and was confirmed in
+Supabase. Automatic callback sign-in displayed an invalid/expired-link message;
+the exact cause remains unverified (a browser mismatch is one possibility).
+Ordinary email/password sign-in then succeeded. The protected hosted
+`/problems/summary` returned HTTP 200, and the UI showed the empty account.
+The signed-in session also survived a page reload. Do not ask this user to
+register again to resolve the earlier callback error.
+
+Still required: SMTP for public sign-up; reliable confirmation callback and
+recovery checks; two-real-account isolation tests; persistence checks; and
+hosting. The later configuration
+checklist describes the full setup, including steps now completed above.
 
 ## Preserved local version
 
