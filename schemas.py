@@ -20,6 +20,11 @@ class AttemptCreate(BaseModel):
 class ReviewCreate(AttemptCreate):
     problem_number: int = Field(gt=0)
 
+
+class ImportPreviewRequest(BaseModel):
+    csv_text: str = Field(min_length=1)
+
+
 class ProblemCreate(BaseModel):
     number : int = Field(gt=0)
     name : str = Field(min_length=1)
@@ -46,4 +51,3 @@ class ProblemSummary(BaseModel):
     attempts: int
     notes: str
     archived: bool
-    

@@ -16,5 +16,4 @@ class Problem:
     notes: str
     archived: bool = False
     review_due_on: date | None = None
-    
-    
+    historical_attempts: int = 0

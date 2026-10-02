@@ -68,6 +68,7 @@ def test_post_problem_saves_valid_problem(tmp_path, monkeypatch):
         "notes": "",
         "archived": False,
         "review_due_on": None,
+        "historical_attempts": 0,
     }
 
     with TestClient(main.app) as client:

@@ -11,13 +11,14 @@ from storage import (
     initialize_database,
     delete_problem,
     archive_problem,
-    restore_problem
-    
+    restore_problem,
+    save_imported_problems,
 )
 from datetime import date
 from tracker import get_due_problems
 
-from schemas import ReviewCreate, ProblemCreate, ProblemSummary
+from schemas import ReviewCreate, ProblemCreate, ProblemSummary, ImportPreviewRequest
+from importing import ImportPreview, ImportResult, preview_notion_csv
 from contextlib import asynccontextmanager
 from summaries import build_problem_summary
 
@@ -33,6 +34,37 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.post("/imports/notion/preview", response_model=ImportPreview)
+def preview_notion_import(submission: ImportPreviewRequest) -> ImportPreview:
+    """Preview CSV text without saving imported problems or attempts."""
+    try:
+        return preview_notion_csv(submission.csv_text)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/imports/notion", response_model=ImportResult)
+def import_notion_csv(submission: ImportPreviewRequest) -> ImportResult:
+    """Revalidate the original CSV and save its valid rows in one transaction."""
+    try:
+        preview = preview_notion_csv(submission.csv_text)
+        saved = save_imported_problems(DATABASE_PATH, preview.problems)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except sqlite3.DatabaseError as error:
+        raise HTTPException(
+            status_code=500,
+            detail="Import failed. No problems were saved. Please try again.",
+        ) from error
+
+    return ImportResult(
+        imported_numbers=saved.imported_numbers,
+        skipped_existing_numbers=saved.skipped_existing_numbers,
+        errors=preview.errors,
+        skipped_rows=preview.skipped_rows,
+    )
 
 
 @app.get("/problems", response_model=list[Problem])
@@ -120,32 +152,32 @@ def list_problem_summaries() -> list[ProblemSummary]:
 
     return list_of_problem_summary
 
+
 @app.delete("/problems/{problem_number}")
 def remove_problem(problem_number: int) -> dict[str, bool]:
     deleted = delete_problem(DATABASE_PATH, problem_number)
 
     if deleted is False:
-        raise HTTPException(
-            status_code=404,
-            detail="Problem not found"
-        )
+        raise HTTPException(status_code=404, detail="Problem not found")
 
     return {"deleted": True}
+
 
 @app.post("/problems/{problem_number}/archive")
 def archive_tracked_problem(problem_number: int) -> dict[str, bool]:
     res = archive_problem(DATABASE_PATH, problem_number)
-    
+
     if res is False:
         raise HTTPException(status_code=404, detail="Problem not found")
 
     return {"archived": True}
 
+
 @app.post("/problems/{problem_number}/restore")
 def restore_tracked_problem(problem_number: int) -> dict[str, bool]:
     res = restore_problem(DATABASE_PATH, problem_number, date.today())
-    
+
     if res is False:
         raise HTTPException(status_code=404, detail="Problem not found")
-    
+
     return {"restored": True}

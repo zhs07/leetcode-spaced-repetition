@@ -1,0 +1,128 @@
+import { useEffect, useRef, useState } from 'react'
+import { request } from './api'
+import type { ImportPreview, ImportResult } from './api'
+
+export default function ImportDialog({ onClose, onImported }: {
+  onClose: () => void;
+  onImported: (result: ImportResult) => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [csvText, setCsvText] = useState('')
+  const [preview, setPreview] = useState<ImportPreview | null>(null)
+  const [busy, setBusy] = useState<'preview' | 'save' | null>(null)
+  const [error, setError] = useState('')
+  // State updates render asynchronously; this guard also blocks rapid clicks.
+  const pending = useRef(false)
+  const active = useRef(true)
+
+  useEffect(() => {
+    active.current = true
+    const element = dialog.current!
+    element.showModal()
+    return () => { active.current = false; element.close() }
+  }, [])
+
+  async function loadPreview() {
+    if (!file || pending.current) return
+    pending.current = true
+    setBusy('preview'); setError(''); setPreview(null); setCsvText('')
+    try {
+      const text = await file.text()
+      if (!text.trim()) throw new Error('This file is empty. Choose a Notion CSV export.')
+      const data = await request<ImportPreview>('/imports/notion/preview', { csv_text: text })
+      if (active.current) { setPreview(data); setCsvText(text) }
+    } catch (failure) {
+      if (active.current) setError(failure instanceof Error ? failure.message : 'Could not preview this file.')
+    } finally {
+      pending.current = false
+      if (active.current) setBusy(null)
+    }
+  }
+
+  async function save() {
+    if (!preview?.problems.length || pending.current) return
+    pending.current = true
+    setBusy('save'); setError('')
+    try {
+      // Send the exact CSV that was previewed. The server validates it again.
+      const result = await request<ImportResult>('/imports/notion', { csv_text: csvText })
+      if (active.current) onImported(result)
+    } catch (failure) {
+      if (active.current) setError(failure instanceof Error ? failure.message : 'Could not import. Please try again.')
+    } finally {
+      pending.current = false
+      if (active.current) setBusy(null)
+    }
+  }
+
+  return <dialog ref={dialog} className="import-dialog" aria-labelledby="import-title" onCancel={event => {
+    event.preventDefault()
+    if (!pending.current) onClose()
+  }}>
+    <div className="import-content">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="eyebrow">Bring your practice history</p>
+        <h2 id="import-title" className="text-2xl font-semibold mt-2">Import from Notion</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">Choose your exported CSV, check the preview, then confirm the import.</p>
+      </div>
+      <button className="icon-button" aria-label="Close import" disabled={busy !== null} onClick={onClose}>×</button>
+    </div>
+
+    <div className="mt-5 space-y-3">
+      <label>Notion CSV file
+        <input type="file" accept=".csv,text/csv" disabled={busy !== null} autoFocus onChange={event => {
+          setFile(event.target.files?.[0] ?? null)
+          setPreview(null); setCsvText(''); setError('')
+        }} />
+      </label>
+      <p className="text-xs leading-5 text-slate-500">Use the fuller export ending in _all.csv when available. Existing problem numbers will be skipped, keeping their notes and history.</p>
+      {!preview && <button className="secondary" disabled={!file || busy !== null} onClick={() => void loadPreview()}>{busy === 'preview' ? 'Reading CSV…' : 'Preview import'}</button>}
+    </div>
+
+    {preview && <div className="mt-6 space-y-4">
+      <div className="import-summary" role="status">
+        <strong className="text-slate-800">{preview.problems.length} valid {preview.problems.length === 1 ? 'problem' : 'problems'}</strong>
+        <span>{preview.errors.length} invalid {preview.errors.length === 1 ? 'row' : 'rows'} · {preview.skipped_rows} empty {preview.skipped_rows === 1 ? 'row' : 'rows'} skipped</span>
+      </div>
+      <p className="text-sm leading-6 text-slate-500">Nothing has been saved yet. Import preserves total attempts and the latest review; next review dates follow the app’s schedule.</p>
+
+      {preview.errors.length > 0 && <div className="import-errors">
+        <h3 className="font-semibold">Rows that won’t be imported</h3>
+        <p className="mt-1 text-xs">You can import the valid problems now, or correct these rows and select the updated file.</p>
+        <ul className="mt-2 list-disc pl-5 space-y-1">
+          {preview.errors.map(row => <li key={row.row_number}>Row {row.row_number}: {row.message}</li>)}
+        </ul>
+      </div>}
+
+      {preview.problems.length > 0 ? <div className="import-preview-table" role="region" aria-label="Import preview; scroll to see all problems" tabIndex={0}>
+        <table>
+          <thead><tr>{['Problem', 'Last reviewed', 'Mastery', 'Attempts'].map(title => <th scope="col" key={title}>{title}</th>)}</tr></thead>
+          <tbody>{preview.problems.map(item => <tr key={item.problem.number}>
+            <th scope="row">
+              <p className="font-semibold">#{item.problem.number} {item.problem.name}</p>
+              <p className="mt-1 font-normal text-xs text-slate-500">{item.problem.difficulty} · {item.problem.topic}</p>
+              {item.problem.notes && <details className="mt-2 font-normal">
+                <summary className="text-button cursor-pointer">Show notes</summary>
+                <p className="mt-2 whitespace-pre-wrap break-words text-slate-500">{item.problem.notes}</p>
+              </details>}
+            </th>
+            <td className="whitespace-nowrap">{item.problem.first_attempt?.reviewed_on}</td>
+            <td>{item.problem.first_attempt?.mastery_level}</td>
+            <td className="font-mono">{item.total_attempts}</td>
+          </tr>)}</tbody>
+        </table>
+      </div> : <p className="text-sm text-slate-600">No valid problems to import. Correct the reported rows or choose another file.</p>}
+    </div>}
+
+    {error && <p role="alert" className="error mt-4">{error}</p>}
+    </div>
+    <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-slate-100 pt-4 mt-4">
+      <button className="secondary" disabled={busy !== null} onClick={onClose}>Cancel</button>
+      {preview && <button className="primary" disabled={busy !== null || preview.problems.length === 0} onClick={() => void save()}>
+        {busy === 'save' ? 'Importing…' : `Import ${preview.problems.length} valid ${preview.problems.length === 1 ? 'problem' : 'problems'}`}
+      </button>}
+    </div>
+  </dialog>
+}

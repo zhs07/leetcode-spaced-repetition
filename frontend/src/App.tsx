@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { masteryLevels, request } from './api'
 import type { ProblemSummary } from './api'
+import ImportDialog from './ImportDialog'
 
 function localToday() {
   const now = new Date()
@@ -156,6 +157,7 @@ export default function App() {
   const [reviewDatesPending, setReviewDatesPending] = useState<Set<number>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<ProblemSummary | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
   const [visibleNotes, setVisibleNotes] = useState<Set<number>>(new Set())
   const [view, setView] = useState('all')
   const [topic, setTopic] = useState('')
@@ -239,7 +241,10 @@ export default function App() {
       <p className="eyebrow mb-3">A little practice. Lasting recall.</p>
       <h1 className="text-5xl font-semibold tracking-tight text-slate-900">LeetCode<span className="text-indigo-500">.</span></h1>
       <p className="mt-4 text-slate-500">Your practice, one attempt at a time.</p>
-      <button className="primary mt-6" disabled={archivePending !== null} onClick={() => setEditor({ kind: 'problem' })}><span aria-hidden="true">＋ </span>Add problem</button>
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <button className="primary" disabled={archivePending !== null} onClick={() => setEditor({ kind: 'problem' })}><span aria-hidden="true">＋ </span>Add problem</button>
+        <button className="secondary" disabled={loading || archivePending !== null} onClick={() => setImportOpen(true)}>Import CSV</button>
+      </div>
     </header>
     <section aria-labelledby="table-title" className="table-card">
       <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b border-slate-100">
@@ -297,6 +302,14 @@ export default function App() {
       setReviewDatesPending(previous => { const next = new Set(previous); next.delete(deleteTarget.number); return next })
       setNotice(`#${deleteTarget.number} ${deleteTarget.name} deleted.`)
       setDeleteTarget(null)
+      void refresh()
+    }} />}
+    {importOpen && <ImportDialog onClose={() => setImportOpen(false)} onImported={result => {
+      setImportOpen(false)
+      setView('all'); setTopic(''); setMastery('')
+      setNotice(`Imported ${result.imported_numbers.length} ${result.imported_numbers.length === 1 ? 'problem' : 'problems'}. Skipped ${result.skipped_existing_numbers.length} existing ${result.skipped_existing_numbers.length === 1 ? 'problem' : 'problems'}, ${result.errors.length} invalid ${result.errors.length === 1 ? 'row' : 'rows'}, and ${result.skipped_rows} empty ${result.skipped_rows === 1 ? 'row' : 'rows'}.`)
+      setNoticeView(null); setActionError('')
+      // Keep this success notice if the subsequent refresh fails.
       void refresh()
     }} />}
     {editor && <EntryDialog editor={editor} onClose={() => setEditor(null)} onSaved={() => {

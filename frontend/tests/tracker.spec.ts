@@ -63,7 +63,7 @@ test('create problems, protect notes, record attempts, and display API errors', 
 
   await page.route('**/api/problems/summary', route => route.fulfill({ status: 503, body: '' }))
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Request failed (503)')
+  await expect(page.getByRole('alert')).toContainText('The server encountered an error (503)')
   await expect(page.getByRole('rowheader', { name: 'Two Sum' })).toBeVisible()
   await page.unroute('**/api/problems/summary')
   await page.getByRole('button', { name: 'Try again' }).click()

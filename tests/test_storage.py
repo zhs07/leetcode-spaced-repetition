@@ -300,10 +300,17 @@ def test_archive_migration_preserves_existing_data(tmp_path):
         mastery_level="Partial Recall",
     )
 
-    save_problem(database_path, problem)
     connection = sqlite3.connect(database_path)
 
     try:
+        # Seed the old schema directly; the current saver needs the new column.
+        connection.execute(
+            """
+            INSERT INTO problems (number, name, difficulty, topic, notes)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (problem.number, problem.name, problem.difficulty, problem.topic, problem.notes),
+        )
         connection.execute(
             """
             INSERT INTO reviews (problem_number, reviewed_on, mastery_level)

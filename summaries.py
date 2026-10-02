@@ -22,7 +22,7 @@ def build_problem_summary(problem: Problem, reviews: list[Review]) -> ProblemSum
             topic=problem.topic,
             mastery_level=most_recent_review.mastery_level,
             next_review=next_review,
-            attempts=len(reviews_list),
+            attempts=problem.historical_attempts + len(reviews_list),
             notes=problem.notes,
             archived=problem.archived,
         )
@@ -34,7 +34,7 @@ def build_problem_summary(problem: Problem, reviews: list[Review]) -> ProblemSum
             topic=problem.topic,
             mastery_level=None,
             next_review=next_review,
-            attempts=len(reviews_list),
+            attempts=problem.historical_attempts + len(reviews_list),
             notes=problem.notes,
             archived=problem.archived,
         )

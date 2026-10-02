@@ -48,4 +48,14 @@
   .review-soon { @apply border-amber-200 bg-amber-50 text-amber-800; }
   .review-later { @apply border-emerald-200 bg-emerald-50 text-emerald-700; }
   .notes-cell { @apply bg-indigo-50/40 px-8 py-5 text-slate-600; }
+  .import-dialog { width: min(850px, calc(100% - 32px)); }
+  .import-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+  .import-content { min-height: 0; overflow-y: auto; }
+  .import-summary { @apply flex flex-wrap items-center justify-between gap-2 rounded-lg bg-indigo-50 px-4 py-3 text-sm text-slate-500; }
+  .import-errors { @apply rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900; overflow-wrap: anywhere; }
+  .import-preview-table { @apply overflow-auto rounded-lg border border-slate-200; max-height: 320px; }
+  .import-preview-table table { min-width: 620px; }
+  .import-preview-table thead th { position: sticky; top: 0; }
+  .import-preview-table tbody th { min-width: 220px; max-width: 320px; overflow-wrap: anywhere; }
+  .import-preview-table tbody td, .import-preview-table tbody th { padding: 14px; }
 }
