@@ -42,7 +42,7 @@ The proxy is for local development. A production deployment must route `/api` to
 for email/password sign-in, sign-up confirmation, PKCE callback handling, password
 recovery, anonymous guest sign-in, and refreshed sessions. Signed-out visitors
 see `App` in preview mode with handwritten examples from `sampleProblems.ts`;
-this mode makes no tracker API requests. Try as guest creates a private empty
+this mode makes no tracker API requests. The Guest button creates a private empty
 workspace using the existing API. Sample action buttons also start a guest;
 filters and notes remain interactive in the sample view.
 

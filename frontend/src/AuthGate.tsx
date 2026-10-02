@@ -10,6 +10,7 @@ export default function AuthGate() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [showAuth, setShowAuth] = useState(false)
+  const [showGuestInfo, setShowGuestInfo] = useState(false)
   const isGuest = session?.user.is_anonymous === true
 
   async function startGuest() {
@@ -74,22 +75,22 @@ export default function AuthGate() {
   if (authConfigurationError) return <main className="auth-shell"><p role="alert" className="error">{authConfigurationError}</p></main>
   if (!hosted) return <App />
   if (loading) return <main className="auth-shell"><p role="status">Restoring your session…</p></main>
-  if (session && !recovering && (!isGuest || !showAuth)) return <>
-    <div className="account-bar">
-      {isGuest ? <><span>Guest workspace · return using this browser. Clearing browser data loses access.</span><button className="quiet-button" disabled={busy} onClick={() => { setMode('signin'); setShowAuth(true); setError(''); setNotice('') }}>Sign in</button></> : <><span>{session.user.email}</span><button className="quiet-button" disabled={busy} onClick={() => void signOut()}>{busy ? 'Signing out…' : 'Sign out'}</button></>}
-      {(error || sessionError) && <p role="alert" className="error">{error || sessionError}</p>}
+  const signInButton = <button className="secondary" disabled={busy} onClick={() => { setMode('signin'); setShowAuth(true); setShowGuestInfo(false); setError(''); setNotice('') }}>Sign in</button>
+  const feedback = (error || sessionError) && <p role="alert" className="error mt-5">{error || sessionError}</p>
+  if (session && !recovering && (!isGuest || !showAuth)) return <App key={session.user.id} accountFeedback={feedback} accountControls={isGuest ? <>
+    <div className="guest-session">
+      <button className="secondary" aria-expanded={showGuestInfo} aria-controls="guest-session-info" onClick={() => setShowGuestInfo(!showGuestInfo)}>Guest</button>
+      {showGuestInfo && <p id="guest-session-info" className="guest-info">Your progress is saved for this browser. Clearing browser data or signing into another account loses access to it.</p>}
     </div>
-    <App key={session.user.id} />
-  </>
+    {signInButton}
+  </> : <>
+    <span className="account-email">{session.user.email}</span><button className="quiet-button" disabled={busy} onClick={() => void signOut()}>{busy ? 'Signing out…' : 'Sign out'}</button>
+  </>} />
 
-  if (!showAuth && !recovering && !sessionError) return <>
-    <div className="preview-bar">
-      <div><p className="eyebrow">Sample tracker</p><p className="text-muted mt-2">Explore these examples, or try a private guest workspace. No account details needed.</p><p className="text-faint mt-2">Filters and notes work here. Action buttons start a fresh guest workspace.</p></div>
-      <div className="flex flex-wrap gap-3"><button className="primary" disabled={busy} onClick={() => void startGuest()}>{busy ? 'Starting guest…' : 'Try as guest'}</button><button className="secondary" disabled={busy} onClick={() => { setShowAuth(true); setError(''); setNotice('') }}>Sign in</button></div>
-      {error && <p role="alert" className="error preview-error">{error}</p>}
-    </div>
-    <App key="sample" preview onStartGuest={() => { if (!busy) void startGuest() }} />
-  </>
+  if (!showAuth && !recovering && !sessionError) return <App key="sample" preview onStartGuest={() => { if (!busy) void startGuest() }} accountFeedback={feedback} accountControls={<>
+    <button className="secondary" disabled={busy} onClick={() => void startGuest()}>{busy ? 'Starting…' : 'Guest'}</button>
+    {signInButton}
+  </>} />
 
   const title = recovering ? 'Choose a new password' : mode === 'signup' ? 'Create your account' : mode === 'reset' ? 'Reset your password' : 'Sign in to your review space'
   return <main className="auth-shell">

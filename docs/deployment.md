@@ -190,7 +190,7 @@ The hosted landing flow now works as follows:
    with three clearly labeled, handwritten sample problems. Filtering, sorting,
    notes, and theme switching work without any tracker API requests. Viewing the
    samples creates no auth user or database rows.
-2. **Try as guest** calls `supabase.auth.signInAnonymously()` on demand. Sample
+2. **Guest** calls `supabase.auth.signInAnonymously()` on demand. Sample
    action buttons also start a fresh guest workspace; the sample records are
    never saved into it. A guest starts with an empty private collection.
 3. The SDK retains and refreshes the guest session in this browser. FastAPI
@@ -241,6 +241,14 @@ on port 8001 had already been restarted with the updated verifier.
   frontend; it showed the sample preview when inspected afterward.
 - Left the synthetic guest, its test record, and the guest browser session
   available for further testing. No cleanup or account deletion was performed.
+
+The subsequent UI refinement uses **Your review space** for both preview and
+signed-in views, with compact **Guest** and **Sign in** controls in the topbar.
+Clicking Guest in an active session reveals its browser persistence details.
+The retained live test record was renamed to **Two Sum**, topic **Arrays &
+Hashing**; its attempt and review date stayed unchanged and were visible after
+reload. Frontend build, lint, 20 auth browser tests, and 18 tracker browser tests
+passed; desktop and mobile layouts were inspected.
 
 Guest verification servers were left running at completion:
 

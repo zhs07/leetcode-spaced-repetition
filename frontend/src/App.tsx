@@ -1,6 +1,6 @@
 import useModalDialog from './useModalDialog'
 import { Fragment, useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { masteryLevels, request } from './api'
 import type { ProblemSummary } from './api'
 import ImportDialog from './ImportDialog'
@@ -132,7 +132,9 @@ function DeleteDialog({ problem, onClose, onDeleted }: { problem: ProblemSummary
   </dialog>
 }
 
-export default function App({ preview = false, onStartGuest }: { preview?: boolean; onStartGuest?: () => void }) {
+export default function App({ preview = false, onStartGuest, accountControls, accountFeedback }: {
+  preview?: boolean; onStartGuest?: () => void; accountControls?: ReactNode; accountFeedback?: ReactNode;
+}) {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark')
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -247,11 +249,15 @@ export default function App({ preview = false, onStartGuest }: { preview?: boole
         </svg>
         {theme === 'dark' ? 'Light mode' : 'Dark mode'}
       </button>
-      <span className="brand">LeetCode<span className="brand-divider">/</span><span className="text-muted">spaced repetition</span></span>
+      <div className="topbar-right">
+        <span className="brand">LeetCode<span className="brand-divider">/</span><span className="text-muted">spaced repetition</span></span>
+        {accountControls && <div className="account-controls">{accountControls}</div>}
+      </div>
     </div>
+    {accountFeedback}
     <header className="page-header">
       <div>
-        <h1>{preview ? 'Sample review space' : 'Your review space'}</h1>
+        <h1>Your review space</h1>
         <p className="header-description">Practice, track, and revisit LeetCode problems for technical interviews and online assessments.</p>
       </div>
       <div className="header-actions">
