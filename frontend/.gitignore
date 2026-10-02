@@ -25,4 +25,5 @@ dist-ssr
 
 # Browser test output
 /test-results/
+/test-results-auth/
 /playwright-report/

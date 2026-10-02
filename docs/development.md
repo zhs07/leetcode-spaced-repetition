@@ -90,7 +90,9 @@ python -m pytest
 The PostgreSQL deployment storage has a separate real-database integration
 suite. See [the deployment guide](deployment.md#implemented-postgresql-milestone)
 for prerequisites and its disposable database setup. Those tests skip when
-PostgreSQL binaries are unavailable; the local API still uses SQLite.
+PostgreSQL binaries are unavailable; the default local API still uses SQLite.
+Hosted mode requires authentication and PostgreSQL configuration; see the
+[authentication setup](deployment.md#implemented-authentication-milestone).
 
 ## Frontend development
 

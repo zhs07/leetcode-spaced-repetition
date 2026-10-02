@@ -3,6 +3,8 @@ __pycache__/
 .venv/
 .venv-check/
 .env
+.env.*
+!.env.example
 .DS_Store
 .pytest_cache/
 tracker.db

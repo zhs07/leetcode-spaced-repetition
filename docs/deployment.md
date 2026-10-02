@@ -1,8 +1,9 @@
 # Public deployment plan
 
-Status: PostgreSQL storage milestone implemented, October 2, 2026. Hosting has
-not been provisioned. The running API still uses local SQLite without
-authentication; PostgreSQL is not wired into public routes yet.
+Status: PostgreSQL storage and email authentication implemented locally,
+October 2, 2026. Hosted mode connects verified Supabase identities to PostgreSQL.
+Default local development still uses SQLite. No Supabase project or hosting has
+been provisioned; actual email delivery and provider settings remain unverified.
 
 ## Preserved local version
 
@@ -194,12 +195,89 @@ Restricted environments may need permission to initialize/start the test server.
 When provider setup is ready, set `TRACKER_MIGRATION_DATABASE_URL` privately
 and run `.venv/bin/python migrate.py`. The command requires TLS. Use a dedicated
 database/project and migration credentials. Runtime role creation, minimum
-grants, Supabase Data API configuration, and authenticated API integration are
+grants, Supabase Data API configuration, and live provider integration are
 still deployment tasks; this migration does not provision accounts or roles.
 The test suite verifies the intended grants locally, not the live Supabase API.
 
-The next milestone is verified Supabase email authentication and wiring the
-owner-scoped store into FastAPI, followed by React session handling.
+## Implemented authentication milestone
+
+`TRACKER_MODE=hosted` requires a PostgreSQL URL, Supabase HTTPS project URL, and
+an explicit comma-separated list of frontend origins. Invalid configuration
+stops startup; Render cannot start in local mode. `main.py` checks the schema
+and opens the pool without migrating. Every tracker route (including import
+preview) verifies a bearer token before constructing its `PostgresStore`.
+Only `/health` and the API documentation are public. Health reports process
+readiness, not ongoing database or email-provider availability.
+
+`auth.py` verifies ES256/RS256 signatures using the configured project's JWKS,
+with expiry, issuer, audience, issue time, role, and UUID-subject checks.
+Anonymous accounts and legacy HS256 tokens are rejected. Configure asymmetric
+signing keys in Supabase. Public keys are cached for five minutes, and an unknown
+key ID triggers refresh. A key-service outage returns 503; invalid sessions
+return 401. Verification is local after keys are cached: access tokens remain
+valid until expiry even after sign-out. Use an appropriate Supabase token expiry.
+
+The React client handles email/password sign-up and sign-in, confirmation,
+password recovery, session refresh, and sign-out through the official Supabase
+SDK. Passwords are never sent to FastAPI. PKCE confirmation/recovery links must
+open in the same browser that requested them. Expired links show a retry message.
+Access tokens accompany API requests; account changes remount the tracker and
+discard late responses from the previous account. API 401s clear the private
+view. Sign-out uses local scope (this browser), not all devices.
+
+### Local verification without a provider account
+
+The backend auth tests use locally signed synthetic tokens and disposable
+PostgreSQL. Browser auth tests mock Supabase network responses: they exercise
+the real JavaScript SDK and forms but do not send email or validate a live project.
+
+```bash
+# Repository root: backend auth and PostgreSQL regression suite
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider
+
+# frontend/: synthetic hosted-auth browser tests on port 5175
+npm run test:auth
+
+# frontend/: existing local workflows, disposable SQLite, ports 8011/5174
+npm run test:e2e
+```
+
+### Provider configuration still required
+
+1. Create the Supabase project and enable email/password sign-in, email
+   confirmation, and a password minimum of at least eight characters. Select
+   asymmetric JWT signing keys supported above. Keep anonymous sign-ins disabled.
+2. Configure SMTP for public confirmation/recovery email. Verify sender/domain
+   requirements and free limits before choosing a provider. Do not disable
+   confirmation as a workaround for the default sender restriction.
+3. Apply the migration with migration credentials. Create a separate login role
+   for the runtime: grant USAGE on `tracker`, SELECT on `schema_migrations`,
+   SELECT/INSERT/UPDATE/DELETE on the three data tables, and USAGE on their
+   sequences. Do not grant schema creation or migration-table writes. Keep
+   `tracker` outside Supabase's exposed Data API schemas and verify browser roles
+   have no direct grants. Our application role uses explicit owner predicates;
+   RLS policies are not being used to impersonate the token's user over SQL.
+4. Copy the root `.env.example` to `.env` and fill it locally with the runtime
+   database URL, Supabase project origin, and exact frontend origin(s). Launch
+   with `.venv/bin/python -m uvicorn main:app --env-file .env`. The Python code
+   itself does not automatically load `.env`; production uses service variables.
+5. Copy `frontend/.env.example` to `frontend/.env.local` and set the project URL
+   and **publishable** key. Never put a secret/service-role key or DB password
+   in `VITE_*` variables. Restart Vite after changes. Production builds default
+   to hosted mode; missing auth settings show a configuration error.
+6. Set the Supabase Site URL and allow exact confirmation/recovery redirects:
+   `http://127.0.0.1:5173/` and `http://127.0.0.1:5173/?auth=recovery` for local
+   integration, then the equivalent HTTPS production URLs. Set `VITE_API_BASE_URL`
+   to the backend HTTPS origin for production; use `/api` for the Vite proxy.
+7. Verify with two real accounts: confirmation, login, reload, recovery, sign-out,
+   and separate records for the same problem number. Confirm that the Data API
+   cannot read tracker tables and records persist across backend restarts.
+
+Sources: [Supabase password auth](https://supabase.com/docs/guides/auth/passwords),
+[PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow),
+[signing keys](https://supabase.com/docs/guides/auth/signing-keys).
+
+The next milestone is provider setup and live integration, followed by hosting.
 Account setup and live deployment will require the user's provider access;
 do not collect credentials in chat. Git staging, commits, and pushes remain
 user-operated unless explicitly authorized.

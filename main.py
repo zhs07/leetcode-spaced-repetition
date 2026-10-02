@@ -1,22 +1,19 @@
 from pathlib import Path
 from random import choice
 
-from fastapi import FastAPI, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from auth import TokenVerifier
+from settings import Settings
+from postgres_storage import PostgresStore, open_pool
+from sqlite_store import SQLiteStore
+from storage_errors import DuplicateProblem, ProblemNotFound, StorageError
 
 from models import Problem, Review
-from storage import (
-    get_all_problems,
-    get_all_reviews,
-    save_review,
-    save_problem_with_first_attempt,
-    initialize_database,
-    delete_problem,
-    archive_problem,
-    restore_problem,
-    save_imported_problems,
-    get_problem_statement,
-    save_problem_statement,
-)
+from storage import initialize_database
 from datetime import date
 from tracker import get_due_problems
 
@@ -29,24 +26,30 @@ from contextlib import asynccontextmanager
 from summaries import build_problem_summary
 from statements import fetch_statement, parse_statement, pasted_statement_html, statement_url, StatementUnavailable
 
-import sqlite3
 
 DATABASE_PATH = str(Path(__file__).resolve().parent / "tracker.db")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    initialize_database(DATABASE_PATH)
-    yield
+security = HTTPBearer(auto_error=False)
+router = APIRouter()
 
 
-app = FastAPI(lifespan=lifespan)
+def get_store(request: Request, credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)]):
+    if request.app.state.settings.mode == "local":
+        return SQLiteStore(DATABASE_PATH)
+    if credentials is None:
+        raise HTTPException(401, "Please sign in to continue.", headers={"WWW-Authenticate": "Bearer"})
+    user_id = request.app.state.verifier.verify(credentials.credentials)
+    return PostgresStore(request.app.state.pool, user_id)
 
 
-def _practice_statement(problem_number: int) -> PracticePick:
-    if not any(problem.number == problem_number for problem in get_all_problems(DATABASE_PATH)):
+Store = Annotated[PostgresStore | SQLiteStore, Depends(get_store)]
+
+
+def _practice_statement(problem_number: int, store: PostgresStore | SQLiteStore) -> PracticePick:
+    if not any(problem.number == problem_number for problem in store.get_all_problems()):
         raise HTTPException(status_code=404, detail="Problem no longer exists in your list")
-    cached = get_problem_statement(DATABASE_PATH, problem_number)
+    cached = store.get_problem_statement(problem_number)
     if cached is not None:
         html, slug = cached
         return PracticePick(problem_number=problem_number, statement=parse_statement(html), leetcode_url=statement_url(slug))
@@ -58,39 +61,39 @@ def _practice_statement(problem_number: int) -> PracticePick:
             statement_error=str(error), leetcode_url=statement_url(error.slug),
         )
     try:
-        save_problem_statement(DATABASE_PATH, problem_number, html, slug)
-    except sqlite3.IntegrityError as error:
+        store.save_problem_statement(problem_number, html, slug)
+    except ProblemNotFound as error:
         raise HTTPException(status_code=404, detail="Problem no longer exists in your list") from error
     return PracticePick(problem_number=problem_number, statement=parse_statement(html), leetcode_url=statement_url(slug))
 
 
-@app.post("/practice/random", response_model=PracticePick)
-def pick_random_due_problem() -> PracticePick:
-    due = get_due_problems(get_all_problems(DATABASE_PATH), get_all_reviews(DATABASE_PATH), date.today())
+@router.post("/practice/random", response_model=PracticePick)
+def pick_random_due_problem(store: Store) -> PracticePick:
+    due = get_due_problems(store.get_all_problems(), store.get_all_reviews(), date.today())
     if not due:
         raise HTTPException(status_code=404, detail="You're caught up. There are no due or overdue problems.")
-    return _practice_statement(choice(due).number)
+    return _practice_statement(choice(due).number, store)
 
 
-@app.post("/practice/{problem_number}/statement/load", response_model=PracticePick)
-def load_practice_statement(problem_number: int) -> PracticePick:
+@router.post("/practice/{problem_number}/statement/load", response_model=PracticePick)
+def load_practice_statement(problem_number: int, store: Store) -> PracticePick:
     """Retry the same selected problem, without drawing a different one."""
-    return _practice_statement(problem_number)
+    return _practice_statement(problem_number, store)
 
 
-@app.put("/practice/{problem_number}/statement", response_model=PracticePick)
-def save_pasted_statement(problem_number: int, submission: StatementSaveRequest) -> PracticePick:
+@router.put("/practice/{problem_number}/statement", response_model=PracticePick)
+def save_pasted_statement(problem_number: int, submission: StatementSaveRequest, store: Store) -> PracticePick:
     html = pasted_statement_html(submission.text)
     try:
-        save_problem_statement(DATABASE_PATH, problem_number, html)
-    except sqlite3.IntegrityError as error:
+        store.save_problem_statement(problem_number, html)
+    except ProblemNotFound as error:
         raise HTTPException(status_code=404, detail="Problem no longer exists in your list") from error
-    cached = get_problem_statement(DATABASE_PATH, problem_number)
-    return PracticePick(problem_number=problem_number, statement=parse_statement(html), leetcode_url=statement_url(cached[1]))
+    cached = store.get_problem_statement(problem_number)
+    return PracticePick(problem_number=problem_number, statement=parse_statement(html), leetcode_url=statement_url(cached[1] if cached else None))
 
 
-@app.post("/imports/notion/preview", response_model=ImportPreview)
-def preview_notion_import(submission: ImportPreviewRequest) -> ImportPreview:
+@router.post("/imports/notion/preview", response_model=ImportPreview)
+def preview_notion_import(submission: ImportPreviewRequest, store: Store) -> ImportPreview:
     """Preview CSV text without saving imported problems or attempts."""
     try:
         return preview_notion_csv(submission.csv_text)
@@ -98,15 +101,15 @@ def preview_notion_import(submission: ImportPreviewRequest) -> ImportPreview:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-@app.post("/imports/notion", response_model=ImportResult)
-def import_notion_csv(submission: ImportPreviewRequest) -> ImportResult:
+@router.post("/imports/notion", response_model=ImportResult)
+def import_notion_csv(submission: ImportPreviewRequest, store: Store) -> ImportResult:
     """Revalidate the original CSV and save its valid rows in one transaction."""
     try:
         preview = preview_notion_csv(submission.csv_text)
-        saved = save_imported_problems(DATABASE_PATH, preview.problems)
+        saved = store.save_imported_problems(preview.problems)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    except sqlite3.DatabaseError as error:
+    except StorageError as error:
         raise HTTPException(
             status_code=500,
             detail="Import failed. No problems were saved. Please try again.",
@@ -120,27 +123,27 @@ def import_notion_csv(submission: ImportPreviewRequest) -> ImportResult:
     )
 
 
-@app.get("/problems", response_model=list[Problem])
-def list_problems() -> list[Problem]:
-    return get_all_problems(DATABASE_PATH)
+@router.get("/problems", response_model=list[Problem])
+def list_problems(store: Store) -> list[Problem]:
+    return store.get_all_problems()
 
 
-@app.get("/reviews", response_model=list[Review])
-def list_reviews() -> list[Review]:
-    return get_all_reviews(DATABASE_PATH)
+@router.get("/reviews", response_model=list[Review])
+def list_reviews(store: Store) -> list[Review]:
+    return store.get_all_reviews()
 
 
-@app.get("/problems/due", response_model=list[Problem])
-def list_due_problems() -> list[Problem]:
-    problems = list_problems()
-    reviews = list_reviews()
+@router.get("/problems/due", response_model=list[Problem])
+def list_due_problems(store: Store) -> list[Problem]:
+    problems = store.get_all_problems()
+    reviews = store.get_all_reviews()
 
     list_due_problems = get_due_problems(problems, reviews, date.today())
     return list_due_problems
 
 
-@app.post("/reviews", response_model=Review, status_code=201)
-def create_review(submission: ReviewCreate) -> Review:
+@router.post("/reviews", response_model=Review, status_code=201)
+def create_review(submission: ReviewCreate, store: Store) -> Review:
     review = Review(
         problem_number=submission.problem_number,
         reviewed_on=submission.reviewed_on,
@@ -148,20 +151,15 @@ def create_review(submission: ReviewCreate) -> Review:
     )
 
     try:
-        save_review(DATABASE_PATH, review)
-    except sqlite3.IntegrityError as error:
-        if "FOREIGN KEY constraint failed" in str(error):
-            raise HTTPException(
-                status_code=404,
-                detail="Problem not found",
-            ) from error
-        raise
+        store.save_review(review)
+    except ProblemNotFound as error:
+        raise HTTPException(404, "Problem not found") from error
 
     return review
 
 
-@app.post("/problems", response_model=Problem, status_code=201)
-def create_problem(submission: ProblemCreate) -> Problem:
+@router.post("/problems", response_model=Problem, status_code=201)
+def create_problem(submission: ProblemCreate, store: Store) -> Problem:
     problem = Problem(
         number=submission.number,
         name=submission.name,
@@ -180,23 +178,18 @@ def create_problem(submission: ProblemCreate) -> Problem:
         )
 
     try:
-        save_problem_with_first_attempt(DATABASE_PATH, problem, first_attempt)
+        store.save_problem_with_first_attempt(problem, first_attempt)
 
-    except sqlite3.IntegrityError as error:
-        if error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY:
-            raise HTTPException(
-                status_code=409,
-                detail="Problem already exists",
-            ) from error
-        raise
+    except DuplicateProblem as error:
+        raise HTTPException(409, "Problem already exists") from error
 
     return problem
 
 
-@app.get("/problems/summary", response_model=list[ProblemSummary])
-def list_problem_summaries() -> list[ProblemSummary]:
-    problems = get_all_problems(DATABASE_PATH)
-    reviews = get_all_reviews(DATABASE_PATH)
+@router.get("/problems/summary", response_model=list[ProblemSummary])
+def list_problem_summaries(store: Store) -> list[ProblemSummary]:
+    problems = store.get_all_problems()
+    reviews = store.get_all_reviews()
     list_of_problem_summary = []
 
     for problem in problems:
@@ -206,17 +199,17 @@ def list_problem_summaries() -> list[ProblemSummary]:
     return list_of_problem_summary
 
 
-@app.get("/problems/{problem_number}/summary", response_model=ProblemSummary)
-def get_problem_summary(problem_number: int) -> ProblemSummary:
-    problem = next((problem for problem in get_all_problems(DATABASE_PATH) if problem.number == problem_number), None)
+@router.get("/problems/{problem_number}/summary", response_model=ProblemSummary)
+def get_problem_summary(problem_number: int, store: Store) -> ProblemSummary:
+    problem = next((problem for problem in store.get_all_problems() if problem.number == problem_number), None)
     if problem is None:
         raise HTTPException(status_code=404, detail="Problem no longer exists in your list")
-    return build_problem_summary(problem, get_all_reviews(DATABASE_PATH))
+    return build_problem_summary(problem, store.get_all_reviews())
 
 
-@app.delete("/problems/{problem_number}")
-def remove_problem(problem_number: int) -> dict[str, bool]:
-    deleted = delete_problem(DATABASE_PATH, problem_number)
+@router.delete("/problems/{problem_number}")
+def remove_problem(problem_number: int, store: Store) -> dict[str, bool]:
+    deleted = store.delete_problem(problem_number)
 
     if deleted is False:
         raise HTTPException(status_code=404, detail="Problem not found")
@@ -224,9 +217,9 @@ def remove_problem(problem_number: int) -> dict[str, bool]:
     return {"deleted": True}
 
 
-@app.post("/problems/{problem_number}/archive")
-def archive_tracked_problem(problem_number: int) -> dict[str, bool]:
-    res = archive_problem(DATABASE_PATH, problem_number)
+@router.post("/problems/{problem_number}/archive")
+def archive_tracked_problem(problem_number: int, store: Store) -> dict[str, bool]:
+    res = store.archive_problem(problem_number)
 
     if res is False:
         raise HTTPException(status_code=404, detail="Problem not found")
@@ -234,11 +227,55 @@ def archive_tracked_problem(problem_number: int) -> dict[str, bool]:
     return {"archived": True}
 
 
-@app.post("/problems/{problem_number}/restore")
-def restore_tracked_problem(problem_number: int) -> dict[str, bool]:
-    res = restore_problem(DATABASE_PATH, problem_number, date.today())
+@router.post("/problems/{problem_number}/restore")
+def restore_tracked_problem(problem_number: int, store: Store) -> dict[str, bool]:
+    res = store.restore_problem(problem_number, date.today())
 
     if res is False:
         raise HTTPException(status_code=404, detail="Problem not found")
 
     return {"restored": True}
+
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings.from_env()
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        if settings.mode == "hosted":
+            application.state.verifier = TokenVerifier(settings.supabase_url)
+            application.state.pool = open_pool(settings.database_url)
+            try:
+                yield
+            finally:
+                application.state.pool.close()
+        else:
+            initialize_database(DATABASE_PATH)
+            yield
+
+    application = FastAPI(lifespan=lifespan)
+    application.state.settings = settings
+    application.add_middleware(
+        CORSMiddleware, allow_origins=list(settings.allowed_origins),
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
+    @application.exception_handler(StorageError)
+    async def storage_failure(request: Request, error: StorageError):
+        if isinstance(error, ProblemNotFound):
+            return JSONResponse(status_code=404, content={"detail": "Problem not found"})
+        if isinstance(error, DuplicateProblem):
+            return JSONResponse(status_code=409, content={"detail": "Problem already exists"})
+        return JSONResponse(status_code=503, content={"detail": "Database temporarily unavailable. Please try again."})
+
+    @application.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    application.include_router(router)
+    return application
+
+
+app = create_app()

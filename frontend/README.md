@@ -36,6 +36,23 @@ The interface defaults to neutral graphite with a muted blue accent. The top-lef
 
 The proxy is for local development. A production deployment must route `/api` to FastAPI separately; `npm run build` does not deploy the app or include the Python server.
 
+## Email authentication
+
+`AuthGate.tsx` wraps the tracker in hosted mode. `auth.ts` uses the Supabase SDK
+for email/password sign-in, sign-up confirmation, PKCE callback handling, password
+recovery, and refreshed sessions. Account changes remount the tracker and clear
+its state; API requests attach the current access token and reject stale responses.
+
+Vite development defaults to local mode. Production builds default to hosted
+mode and show a configuration error without Supabase settings. Use the public
+values in `.env.example` as a template for `.env.local`; never add a secret or
+service-role key. `VITE_API_BASE_URL` is the production backend origin or `/api`
+for the local proxy. See the [deployment guide](../docs/deployment.md) for setup.
+
+Run `npm run test:auth` for the hosted UI on port 5175 with mocked Supabase
+responses. It uses the real SDK but no live accounts or email; provider-level
+verification remains a separate step. Existing `npm run test:e2e` uses local mode.
+
 ## Checks
 
 ```bash

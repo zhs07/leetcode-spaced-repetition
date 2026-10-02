@@ -82,6 +82,9 @@
   .bg-surface-soft { background: var(--soft); }
 }
 @layer components {
+  .auth-shell { max-width: 500px; margin: 64px auto; padding: 0 20px; }
+  .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+  .account-bar { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; max-width: 1440px; margin: auto; padding: 12px 36px 0; font-size: 13px; overflow-wrap: anywhere; }
   .app-shell { max-width: 1440px; margin: 0 auto; padding: 0 36px 28px; }
   .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 76px; border-bottom: 1px solid var(--line); }
   .theme-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 12px; padding: 8px 10px; margin-left: -10px; border-radius: 7px; color: var(--muted); }

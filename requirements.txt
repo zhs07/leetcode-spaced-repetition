@@ -31,6 +31,7 @@ Pygments==2.21.0
 pytest==9.1.1
 psycopg[binary]==3.3.6
 psycopg-pool==3.3.3
+PyJWT[crypto]==2.15.1
 python-dotenv==1.2.3
 python-multipart==0.0.32
 PyYAML==6.0.3
