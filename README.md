@@ -15,6 +15,35 @@ and create a tool I will use for reviewing LeetCode problems.
 - Delete unwanted problems and their attempts, with confirmation.
 - Archive problems to pause reviews while keeping their history; restore them to make them due immediately. A new attempt resumes the normal schedule.
 - Import a Notion CSV with a preview, row errors, confirmation, and preserved attempt totals. Existing problems are skipped.
+- Random pick chooses a saved due/overdue problem for blind practice, showing its statement while hiding identifying details.
+
+## Blind practice
+
+Click **Random pick** to open one randomly selected active problem whose review
+date is today or earlier. The draw uses your entire saved due list, independent
+of table filters. Archived, future-scheduled, and unscheduled problems are excluded.
+
+The dialog shows only the statement, examples, and constraints. Name, number,
+topic, difficulty, history, notes, and the LeetCode link stay hidden until
+**Reveal details**. **Record attempt** saves directly to the selected problem
+without revealing its identity and uses the usual mastery schedule. Picking or
+closing a problem never records an attempt.
+
+On the first pick, FastAPI looks up the problem number in LeetCode's public index
+and retrieves that one description. It caches the description in SQLite;
+subsequent picks use the saved copy without another LeetCode request. The public
+endpoints may change or be unavailable. Premium/unavailable statements have a
+retry and plain-text paste fallback. Paste a statement once and later picks use
+that local copy. No LeetCode login or new dependencies are required.
+
+Formatting is converted to allowed display nodes and rendered with React.
+Scripts, source styles, interactive links, and arbitrary HTML attributes are
+excluded; HTTPS diagrams are allowed only from recognized LeetCode image hosts.
+
+API: POST `/practice/random`, POST `/practice/{number}/statement/load`,
+PUT `/practice/{number}/statement` with `{"text": "..."}`, and
+GET `/problems/{number}/summary` for an explicit reveal. Statement caches have
+a foreign key to the saved problem and are removed when it is deleted.
 
 ## Importing from Notion
 
@@ -47,8 +76,7 @@ Before this repair, it saves a SQLite backup beside the database as
 `tracker.db.before-import-counts.bak` (ignored by Git).
 
 ## Planned functionality
-- Randomly select a due problem, with options to hide its topic,
-  name, and difficulty + from specific curated list if user want(nc 250/150, blind 75/grind 75 etc.)
+- Support curated practice lists (NeetCode 250/150, Blind 75, Grind 75, etc.).
 - Explore automatic archiving based on repeated mastered attempts
   and problem difficulty.
 

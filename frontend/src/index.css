@@ -58,4 +58,21 @@
   .import-preview-table thead th { position: sticky; top: 0; }
   .import-preview-table tbody th { min-width: 220px; max-width: 320px; overflow-wrap: anywhere; }
   .import-preview-table tbody td, .import-preview-table tbody th { padding: 14px; }
+  .practice-dialog { width: min(900px, calc(100% - 32px)); }
+  .practice-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+  .practice-dialog::backdrop { background: #0f172ae8; backdrop-filter: blur(12px); }
+  .practice-content { min-height: 0; overflow-y: auto; padding: 20px 2px 4px; }
+  .practice-details { @apply rounded-lg border border-slate-200 bg-slate-50 p-4 mt-5; }
+  .problem-statement { @apply text-sm leading-7 text-slate-700; overflow-wrap: anywhere; }
+  .problem-statement p, .problem-statement pre, .problem-statement ul, .problem-statement ol { margin: 0 0 16px; }
+  .problem-statement strong, .problem-statement b { font-weight: 650; }
+  .problem-statement code { @apply rounded bg-slate-100 px-1 py-0.5 text-[13px]; font-family: ui-monospace, monospace; }
+  .problem-statement pre { @apply rounded-lg border border-slate-200 bg-slate-50 p-4 text-[13px] leading-6; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+  .problem-statement pre code { background: transparent; padding: 0; }
+  .problem-statement ul { list-style: disc; padding-left: 24px; }
+  .problem-statement ol { list-style: decimal; padding-left: 24px; }
+  .problem-statement h2, .problem-statement h3, .problem-statement h4 { font-weight: 650; margin-bottom: 12px; }
+  .problem-statement img { display: block; max-width: 100%; height: auto; margin: 16px 0; }
+  .problem-statement blockquote { border-left: 3px solid #cbd5e1; padding-left: 16px; margin: 16px 0; }
+  .problem-statement table { display: block; max-width: 100%; overflow-x: auto; }
 }

@@ -1,4 +1,5 @@
 from pathlib import Path
+from random import choice
 
 from fastapi import FastAPI, HTTPException
 
@@ -13,14 +14,20 @@ from storage import (
     archive_problem,
     restore_problem,
     save_imported_problems,
+    get_problem_statement,
+    save_problem_statement,
 )
 from datetime import date
 from tracker import get_due_problems
 
-from schemas import ReviewCreate, ProblemCreate, ProblemSummary, ImportPreviewRequest
+from schemas import (
+    ReviewCreate, ProblemCreate, ProblemSummary, ImportPreviewRequest,
+    PracticePick, StatementSaveRequest,
+)
 from importing import ImportPreview, ImportResult, preview_notion_csv
 from contextlib import asynccontextmanager
 from summaries import build_problem_summary
+from statements import fetch_statement, parse_statement, pasted_statement_html, statement_url, StatementUnavailable
 
 import sqlite3
 
@@ -34,6 +41,52 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+def _practice_statement(problem_number: int) -> PracticePick:
+    if not any(problem.number == problem_number for problem in get_all_problems(DATABASE_PATH)):
+        raise HTTPException(status_code=404, detail="Problem no longer exists in your list")
+    cached = get_problem_statement(DATABASE_PATH, problem_number)
+    if cached is not None:
+        html, slug = cached
+        return PracticePick(problem_number=problem_number, statement=parse_statement(html), leetcode_url=statement_url(slug))
+    try:
+        html, slug = fetch_statement(problem_number)
+    except StatementUnavailable as error:
+        return PracticePick(
+            problem_number=problem_number, statement=None,
+            statement_error=str(error), leetcode_url=statement_url(error.slug),
+        )
+    try:
+        save_problem_statement(DATABASE_PATH, problem_number, html, slug)
+    except sqlite3.IntegrityError as error:
+        raise HTTPException(status_code=404, detail="Problem no longer exists in your list") from error
+    return PracticePick(problem_number=problem_number, statement=parse_statement(html), leetcode_url=statement_url(slug))
+
+
+@app.post("/practice/random", response_model=PracticePick)
+def pick_random_due_problem() -> PracticePick:
+    due = get_due_problems(get_all_problems(DATABASE_PATH), get_all_reviews(DATABASE_PATH), date.today())
+    if not due:
+        raise HTTPException(status_code=404, detail="You're caught up. There are no due or overdue problems.")
+    return _practice_statement(choice(due).number)
+
+
+@app.post("/practice/{problem_number}/statement/load", response_model=PracticePick)
+def load_practice_statement(problem_number: int) -> PracticePick:
+    """Retry the same selected problem, without drawing a different one."""
+    return _practice_statement(problem_number)
+
+
+@app.put("/practice/{problem_number}/statement", response_model=PracticePick)
+def save_pasted_statement(problem_number: int, submission: StatementSaveRequest) -> PracticePick:
+    html = pasted_statement_html(submission.text)
+    try:
+        save_problem_statement(DATABASE_PATH, problem_number, html)
+    except sqlite3.IntegrityError as error:
+        raise HTTPException(status_code=404, detail="Problem no longer exists in your list") from error
+    cached = get_problem_statement(DATABASE_PATH, problem_number)
+    return PracticePick(problem_number=problem_number, statement=parse_statement(html), leetcode_url=statement_url(cached[1]))
 
 
 @app.post("/imports/notion/preview", response_model=ImportPreview)
@@ -151,6 +204,14 @@ def list_problem_summaries() -> list[ProblemSummary]:
         list_of_problem_summary.append(problem_summary)
 
     return list_of_problem_summary
+
+
+@app.get("/problems/{problem_number}/summary", response_model=ProblemSummary)
+def get_problem_summary(problem_number: int) -> ProblemSummary:
+    problem = next((problem for problem in get_all_problems(DATABASE_PATH) if problem.number == problem_number), None)
+    if problem is None:
+        raise HTTPException(status_code=404, detail="Problem no longer exists in your list")
+    return build_problem_summary(problem, get_all_reviews(DATABASE_PATH))
 
 
 @app.delete("/problems/{problem_number}")

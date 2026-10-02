@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date
 
 from pydantic import BaseModel, Field, field_validator
@@ -51,3 +53,29 @@ class ProblemSummary(BaseModel):
     attempts: int
     notes: str
     archived: bool
+
+
+class StatementElement(BaseModel):
+    tag: str
+    children: list[StatementElement | str] = Field(default_factory=list)
+    src: str | None = None
+    alt: str | None = None
+
+
+class PracticePick(BaseModel):
+    # Used internally for saving the attempt; the dialog hides this number.
+    problem_number: int
+    statement: list[StatementElement | str] | None
+    statement_error: str | None = None
+    leetcode_url: str | None = None
+
+
+class StatementSaveRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=100_000)
+
+    @field_validator("text")
+    @classmethod
+    def validate_statement_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Paste a non-empty problem statement")
+        return value

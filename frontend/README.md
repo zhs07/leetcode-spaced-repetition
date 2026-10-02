@@ -25,6 +25,9 @@ Open the URL printed by Vite (normally http://127.0.0.1:5173).
 - The UI applies confirmed archive status before refreshing. If refresh fails after a restore, it asks for a refresh to get the review date, rather than guessing a date. A successful write and a failed refresh have separate messages.
 - Delete remains permanent and asks for confirmation including the attempt count.
 - Python owns mastery, next-review dates, and attempt counts. The UI only formats them.
+- `src/PracticeDialog.tsx` opens from Random pick and calls POST `/practice/random`. The server draws from saved due/overdue active problems using the existing scheduling policy, independent of table filters.
+- The dialog renders statement nodes with React and hides identity/notes/history. Reveal details fetches GET `/problems/{number}/summary` only when requested. Record attempt uses the selected internal number and the existing POST `/reviews`, then refreshes summaries.
+- Descriptions are fetched on demand and cached in SQLite. If a statement is unavailable, retry loads the same problem; a plain-text paste can be saved once as a fallback. Switching problems resets reveal/form state. Picking never creates a review.
 - Mastery choices currently mirror `scheduler.REVIEW_INTERVALS`; update both if labels change.
 
 The proxy is for local development. A production deployment must route `/api` to FastAPI separately; `npm run build` does not deploy the app or include the Python server.
@@ -38,4 +41,4 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Browser tests start the existing backend with a disposable SQLite database on port 8011 and Vite on 5174. They require the repository's `.venv` and never use `tracker.db`. They exercise creation, hidden notes, scheduling, filtering/sorting, CSV preview/import/reimport, deletion, archive/restore, persistence, mobile layout, and error recovery.
+Browser tests start the existing backend with a disposable SQLite database on port 8011 and Vite on 5174. They require the repository's `.venv` and never use `tracker.db`. They exercise creation, hidden notes, scheduling, filtering/sorting, blind practice, CSV preview/import/reimport, deletion, archive/restore, persistence, mobile layout, and error recovery. Blind-practice checks use cached synthetic statements or mocked source responses; they do not make live LeetCode requests.

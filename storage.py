@@ -61,6 +61,15 @@ def initialize_database(database_path: str) -> None:
                 """)
         connection.commit()
         _repair_legacy_historical_counts(connection, database_path)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS problem_statements (
+                problem_number INTEGER PRIMARY KEY,
+                html TEXT NOT NULL,
+                title_slug TEXT,
+                FOREIGN KEY (problem_number) REFERENCES problems(number) ON DELETE CASCADE
+            )
+        """)
+        connection.commit()
     finally:
         connection.close()
 
@@ -381,6 +390,37 @@ def delete_problem(database_path: str, problem_number: int) -> bool:
         connection.close()
 
     return cursor.rowcount == 1
+
+
+def get_problem_statement(database_path: str, problem_number: int) -> tuple[str, str | None] | None:
+    connection = get_connection(database_path)
+    try:
+        return connection.execute(
+            "SELECT html, title_slug FROM problem_statements WHERE problem_number = ?",
+            (problem_number,),
+        ).fetchone()
+    finally:
+        connection.close()
+
+
+def save_problem_statement(
+    database_path: str, problem_number: int, html: str, title_slug: str | None = None,
+) -> None:
+    connection = get_connection(database_path)
+    try:
+        connection.execute("""
+            INSERT INTO problem_statements (problem_number, html, title_slug)
+            VALUES (?, ?, ?)
+            ON CONFLICT(problem_number) DO UPDATE SET
+                html = excluded.html,
+                title_slug = COALESCE(excluded.title_slug, problem_statements.title_slug)
+        """, (problem_number, html, title_slug))
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def archive_problem(database_path: str, problem_number: int) -> bool:

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { masteryLevels, request } from './api'
 import type { ProblemSummary } from './api'
 import ImportDialog from './ImportDialog'
+import PracticeDialog from './PracticeDialog'
 
 function localToday() {
   const now = new Date()
@@ -158,6 +159,7 @@ export default function App() {
   const [deleteTarget, setDeleteTarget] = useState<ProblemSummary | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [practiceOpen, setPracticeOpen] = useState(false)
   const [visibleNotes, setVisibleNotes] = useState<Set<number>>(new Set())
   const [view, setView] = useState('all')
   const [topic, setTopic] = useState('')
@@ -244,6 +246,7 @@ export default function App() {
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <button className="primary" disabled={archivePending !== null} onClick={() => setEditor({ kind: 'problem' })}><span aria-hidden="true">＋ </span>Add problem</button>
         <button className="secondary" disabled={loading || archivePending !== null} onClick={() => setImportOpen(true)}>Import CSV</button>
+        <button className="secondary" disabled={loading || archivePending !== null} onClick={() => setPracticeOpen(true)}>Random pick</button>
       </div>
     </header>
     <section aria-labelledby="table-title" className="table-card">
@@ -303,6 +306,9 @@ export default function App() {
       setNotice(`#${deleteTarget.number} ${deleteTarget.name} deleted.`)
       setDeleteTarget(null)
       void refresh()
+    }} />}
+    {practiceOpen && <PracticeDialog onClose={() => setPracticeOpen(false)} onSaved={() => {
+      setPracticeOpen(false); setNotice('Attempt recorded.'); setNoticeView(null); setActionError(''); void refresh()
     }} />}
     {importOpen && <ImportDialog onClose={() => setImportOpen(false)} onImported={result => {
       setImportOpen(false)

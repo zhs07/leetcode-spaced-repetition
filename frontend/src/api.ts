@@ -20,6 +20,15 @@ export type ImportResult = {
   errors: ImportPreview['errors'];
   skipped_rows: number;
 }
+export type StatementNode = string | {
+  tag: string; children: StatementNode[]; src: string | null; alt: string | null;
+}
+export type PracticePick = {
+  problem_number: number;
+  statement: StatementNode[] | null;
+  statement_error: string | null;
+  leetcode_url: string | null;
+}
 // Exact labels from scheduler.REVIEW_INTERVALS; Python owns scheduling.
 export const masteryLevels = ['Learned Solution', 'Partial Recall', 'Solved with Struggle', 'Solved Independently', 'Mastered']
 export async function request<T>(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
