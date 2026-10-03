@@ -1,10 +1,10 @@
 # Public deployment plan
 
-Status: Supabase project and initial provider configuration completed October 2,
-2026. PostgreSQL storage and email authentication are implemented locally.
-The local hosted backend now connects successfully as the restricted runtime
-role. Real confirmation/recovery flows and public hosting remain unfinished.
-Running without hosted environment settings still selects SQLite.
+Status: Render frontend and API deployed October 3, 2026, using the existing
+Supabase project and restricted runtime database role. Guest access works on
+the public site. Public signup/upgrade/recovery email delivery and remaining
+live-account checks are unfinished. Running without hosted environment settings
+still selects SQLite locally.
 
 ## Current launch scope - October 3
 
@@ -13,9 +13,10 @@ the app on Reddit for others to try. Keep anonymous guest creation, the sample
 tracker, account management, and same-UUID guest upgrades enabled. The first
 deployment remains fully free, with no domain purchase or payment details.
 
-The minimum remaining work is hosting configuration, essential authentication
-and ownership checks, persistence verification on the deployed service, and
-working public signup/recovery email delivery. CAPTCHA, additional request
+Hosting configuration, public API authentication/CORS checks, and guest
+persistence verification on the deployed service are complete. Remaining work
+is existing-account sign-in, the live ownership checks below, and working public
+signup/recovery email delivery. CAPTCHA, additional request
 limits, review-history caps, and automatic guest cleanup are deferred follow-up
 work rather than blockers for this small launch. Existing guest problem caps,
 input protections, and Supabase authentication rate limits remain in place.
@@ -25,8 +26,59 @@ remaining possibility of automated account creation and resource consumption.
 The public email provider is not yet selected or configured. Existing permanent
 account login and guest access do not establish that outside users can receive
 signup, upgrade, or recovery emails. Custom SMTP is still needed for those flows.
-Render was opened at its sign-in page; account access is pending. No Render
-services have been created. The user continues to handle commits and pushes.
+The user created and verified their Render account, committed/pushed the TLS
+change, and explicitly approved transferring the existing runtime connection
+to Render and deploying both services publicly. The user continues to handle
+commits and pushes.
+
+### Render deployment
+
+Deployed commit `b70977d4a327bd8e6099b596c082cc7a290cfe8f` from the public repository
+`https://github.com/zhs07/leetcode-spaced-repetition`, using the existing
+`render.yaml`. The old Git remote redirects to this renamed repository; no local
+Git configuration was changed. Render fetched the public repository without a
+GitHub app connection.
+
+- Frontend: https://leetcode-tracker-web.onrender.com/
+  - Static site `srv-db0d4vjncjis73f2bteg`.
+- API: https://leetcode-tracker-api-8urc.onrender.com
+  - Free web service `srv-db0d4vjncjis73f2btf0`, Oregon.
+- Blueprint: `exs-db0d0sc9v7es73atisu0`; Auto Sync was set to **No** (Sync paused).
+  Service auto-deploys remain off as declared in the Blueprint.
+
+The API has the restricted runtime connection in its environment settings, not
+an admin/migration credential. No Mac-specific `SSL_CERT_FILE` path was copied.
+The first deploy used explicit `https://pending.invalid` placeholders for the
+two cross-service URL settings, because actual assigned origins were not yet
+available. Those placeholders have been replaced and deployed:
+
+- `VITE_API_BASE_URL=https://leetcode-tracker-api-8urc.onrender.com`.
+- `TRACKER_ALLOWED_ORIGINS=https://leetcode-tracker-web.onrender.com`.
+- Supabase Site URL: `https://leetcode-tracker-web.onrender.com/`.
+- Added exact confirmation and recovery redirects for that origin, including
+  `https://leetcode-tracker-web.onrender.com/?auth=recovery`. Existing local
+  redirect entries were retained.
+
+Read-only production HTTP checks passed: `/health` returned 200; unauthenticated
+and invalid-token `/problems` requests returned 401; CORS permits the exact
+frontend origin and rejects an unrelated origin; the built frontend contains
+the assigned API address and no placeholder address.
+
+A real guest signed in through the public UI and saved problem #1 named
+**Deployment smoke test**, topic **Deployment testing**, with no initial review.
+The new guest workspace did not show the existing personal collection. The
+session and test record survived Chrome restarting for an update. A controlled
+restart of only the Render API was recorded as **Service restarted by you**;
+after reloading the public frontend, the same guest's saved problem returned
+with zero attempts and no scheduled review. The test record
+and guest identity are retained in their separate test workspace. A live SQL
+check found 71 problems, 70 reviews, and one statement, including exactly one
+labelled deployment-test record owned by an anonymous user.
+
+Public email SMTP is not configured yet. Existing-account login on the public
+origin still needs the user's own sign-in. Full live two-user read/write
+isolation and an authenticated direct Data API rejection probe remain open;
+the earlier disposable-database auth/isolation tests are separate evidence.
 
 ### Database TLS verification completed
 
