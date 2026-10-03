@@ -1,9 +1,16 @@
 """Verify Supabase access tokens using the configured project's public keys."""
 
+from dataclasses import dataclass
 from uuid import UUID
 
 import jwt
 from fastapi import HTTPException
+
+
+@dataclass(frozen=True)
+class VerifiedUser:
+    user_id: UUID
+    is_anonymous: bool
 
 
 class TokenVerifier:
@@ -14,7 +21,7 @@ class TokenVerifier:
             cache_jwk_set=True, lifespan=300,
         )
 
-    def verify(self, token: str) -> UUID:
+    def verify(self, token: str) -> VerifiedUser:
         try:
             if len(token) > 16384:
                 raise ValueError("Oversized token")
@@ -26,16 +33,16 @@ class TokenVerifier:
             claims = jwt.decode(
                 token, key.key, algorithms=["ES256", "RS256"],
                 issuer=self.issuer, audience="authenticated",
-                options={"require": ["exp", "iat", "iss", "aud", "sub", "role"]},
+                options={"require": ["exp", "iat", "iss", "aud", "sub", "role", "is_anonymous"]},
             )
             # Anonymous sign-in still supplies a signed, authenticated UUID.
             # Guests use exactly the same owner-scoped store as permanent users.
-            if claims["role"] != "authenticated" or type(claims.get("is_anonymous", False)) is not bool:
+            if claims["role"] != "authenticated" or type(claims["is_anonymous"]) is not bool:
                 raise ValueError("An authenticated account is required")
             user_id = UUID(claims["sub"])
             if user_id.int == 0:
                 raise ValueError("Invalid subject")
-            return user_id
+            return VerifiedUser(user_id, claims["is_anonymous"])
         except jwt.PyJWKClientConnectionError:
             raise HTTPException(503, "Sign-in verification is temporarily unavailable. Please try again.") from None
         except (jwt.PyJWTError, ValueError, TypeError, KeyError):

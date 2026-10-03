@@ -1,5 +1,7 @@
 """JWT verification and authenticated HTTP requests against disposable PostgreSQL."""
 
+import csv
+import io
 import json
 import time
 from uuid import uuid4
@@ -12,7 +14,8 @@ from psycopg.conninfo import make_conninfo
 import pytest
 
 import main
-from auth import TokenVerifier
+from auth import TokenVerifier, VerifiedUser
+from importing import NOTION_DATA_COLUMNS
 from postgres_storage import open_pool
 from settings import Settings
 
@@ -41,12 +44,19 @@ def signing(monkeypatch):
 
 def test_verified_subject_is_identity(signing):
     owner = uuid4()
-    assert TokenVerifier(PROJECT).verify(signing(owner)) == owner
+    assert TokenVerifier(PROJECT).verify(signing(owner)) == VerifiedUser(owner, False)
 
 
 def test_guest_has_a_verified_individual_identity(signing):
     owner = uuid4()
-    assert TokenVerifier(PROJECT).verify(signing(owner, is_anonymous=True)) == owner
+    assert TokenVerifier(PROJECT).verify(signing(owner, is_anonymous=True)) == VerifiedUser(owner, True)
+
+
+def test_guest_metadata_cannot_override_signed_anonymous_claim(signing):
+    user = TokenVerifier(PROJECT).verify(signing(
+        is_anonymous=True, user_metadata={"is_anonymous": False, "problem_limit": None},
+    ))
+    assert user.is_anonymous is True
 
 
 @pytest.mark.parametrize("overrides", [
@@ -78,13 +88,14 @@ def test_forged_signature_unknown_key_and_unsigned_token_rejected(signing):
         assert result.value.status_code == 401
 
 
-def test_missing_required_claim_rejected(signing):
+@pytest.mark.parametrize("missing", ["exp", "is_anonymous"])
+def test_missing_required_claim_rejected(signing, missing):
     claims = jwt.decode(signing(), options={"verify_signature": False})
-    # Use the real signature verifier, but a new matching key with a missing exp.
+    # Use the real signature verifier, but a matching key with a missing claim.
     key = ec.generate_private_key(ec.SECP256R1())
     verifier = TokenVerifier(PROJECT)
     verifier.keys.get_signing_key_from_jwt = lambda token: jwt.PyJWK.from_json(jwt.algorithms.ECAlgorithm.to_jwk(key.public_key()))
-    del claims["exp"]
+    del claims[missing]
     with pytest.raises(HTTPException) as result:
         verifier.verify(jwt.encode(claims, key, algorithm="ES256", headers={"kid": "test-key"}))
     assert result.value.status_code == 401
@@ -175,6 +186,78 @@ def test_cors_allows_only_configured_origin(hosted_client):
     response = hosted_client.options("/problems", headers={**headers, "Origin": "https://untrusted.example"})
     assert response.status_code == 400
     assert "access-control-allow-origin" not in response.headers
+
+
+def capacity_csv(numbers):
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=NOTION_DATA_COLUMNS)
+    writer.writeheader()
+    writer.writerows({
+        "Problem": f"Capacity test #{number}", "Difficulty": "Easy", "Topic": "Arrays",
+        "Last Reviewed": "September 10, 2026", "Mastery": "🔵 Mastered",
+        "Pattern/Trick": "Keep guest history", "Reviews": "3",
+    } for number in numbers)
+    return {"csv_text": stream.getvalue()}
+
+
+def test_guest_http_limit_and_same_owner_upgrade_preserve_collection(hosted_client, signing):
+    owner = uuid4()
+    guest = {"Authorization": "Bearer " + signing(
+        owner, is_anonymous=True, user_metadata={"is_anonymous": False},
+    )}
+    permanent = {"Authorization": "Bearer " + signing(owner, is_anonymous=False)}
+    payload = {"number": 51, "name": "New problem", "difficulty": "Easy", "topic": "Arrays",
+               "is_anonymous": False, "problem_limit": None}
+    response = hosted_client.post("/imports/notion", json=capacity_csv(range(1, 51)), headers=guest)
+    assert response.status_code == 200
+    assert len(response.json()["imported_numbers"]) == 50
+    assert hosted_client.post("/problems/1/archive", headers=guest).status_code == 200
+    assert hosted_client.put("/practice/1/statement", json={"text": "Guest statement"}, headers=guest).status_code == 200
+    before = hosted_client.get("/problems", headers=guest).json()
+    reviews = hosted_client.get("/reviews", headers=guest).json()
+    response = hosted_client.post("/problems", json=payload, headers=guest)
+    assert response.status_code == 403
+    assert "up to 50 problems" in response.json()["detail"]
+    assert "Create an account" in response.json()["detail"]
+    assert hosted_client.post("/problems", json={**payload, "number": 1}, headers=guest).status_code == 409
+    assert hosted_client.get("/problems", headers=guest).json() == before
+    assert hosted_client.get("/reviews", headers=guest).json() == reviews
+    # A refreshed, provider-signed permanent identity with the same UUID lifts
+    # the cap without moving any data. This simulates conversion, not live mail.
+    assert hosted_client.get("/problems", headers=permanent).json() == before
+    assert hosted_client.get("/reviews", headers=permanent).json() == reviews
+    assert hosted_client.post("/problems", json=payload, headers=permanent).status_code == 201
+    assert len(hosted_client.get("/problems", headers=permanent).json()) == 51
+    assert len(hosted_client.get("/reviews", headers=permanent).json()) == 50
+    assert "Guest statement" in hosted_client.post("/practice/1/statement/load", headers=permanent).text
+
+
+def test_guest_http_import_rejection_and_delete_free_capacity(hosted_client, signing):
+    guest = {"Authorization": "Bearer " + signing(is_anonymous=True)}
+    other = {"Authorization": "Bearer " + signing(is_anonymous=True)}
+    permanent = {"Authorization": "Bearer " + signing(is_anonymous=False)}
+    assert hosted_client.post("/imports/notion", json=capacity_csv(range(1, 50)), headers=guest).status_code == 200
+    before = hosted_client.get("/problems", headers=guest).json()
+    reviews = hosted_client.get("/reviews", headers=guest).json()
+    batch = capacity_csv([1, 50, 51])
+    assert hosted_client.post("/imports/notion/preview", json=batch, headers=guest).status_code == 200
+    response = hosted_client.post("/imports/notion", json=batch, headers=guest)
+    assert response.status_code == 403  # Policy errors must not become import 500s.
+    assert "up to 50 problems" in response.json()["detail"]
+    assert hosted_client.get("/problems", headers=guest).json() == before
+    assert hosted_client.get("/reviews", headers=guest).json() == reviews
+    assert hosted_client.post("/imports/notion", json=capacity_csv([1, 50, 50]), headers=guest).json()["imported_numbers"] == [50]
+    repeated = hosted_client.post("/imports/notion", json=capacity_csv(range(1, 51)), headers=guest)
+    assert repeated.status_code == 200 and repeated.json()["imported_numbers"] == []
+    attempt = {"problem_number": 2, "reviewed_on": "2026-10-02", "mastery_level": "Mastered"}
+    assert hosted_client.post("/reviews", json=attempt, headers=guest).status_code == 201
+    assert hosted_client.post("/imports/notion", json=capacity_csv([1]), headers=other).status_code == 200
+    assert len(hosted_client.get("/problems", headers=other).json()) == 1
+    assert hosted_client.delete("/problems/1", headers=guest).status_code == 200
+    assert hosted_client.post("/imports/notion", json=capacity_csv([51]), headers=guest).status_code == 200
+    assert len(hosted_client.get("/problems", headers=guest).json()) == 50
+    assert hosted_client.post("/imports/notion", json=capacity_csv(range(1, 61)), headers=permanent).status_code == 200
+    assert len(hosted_client.get("/problems", headers=permanent).json()) == 60
 
 
 @pytest.mark.parametrize("overrides", [

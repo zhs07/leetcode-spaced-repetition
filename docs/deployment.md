@@ -379,6 +379,61 @@ The auth browser checks use mocked Supabase responses; the local tracker checks
 use a disposable database. No live account or tracker data was written during
 this UI verification.
 
+## Guest storage limits milestone (implemented locally)
+
+Implemented October 2 after the account UI milestone. Selected policy:
+guests may save 50 distinct problems, including archived problems; permanent
+accounts have no guest cap. Existing records are retained even if an older
+guest collection already exceeds the cap. Re-importing existing numbers is a
+no-op; an import that would exceed capacity must fail without saving any rows.
+Deleting a problem frees a slot; archiving does not.
+
+The capacity policy helper, `ensure_problem_capacity` in `guest_limits.py`, is
+implemented. It uses sets to count distinct existing problems and new additions.
+Run its tests from the repository root:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_guest_limits.py
+```
+
+The helper is now connected to the hosted API and PostgreSQL storage:
+
+1. `auth.py` returns a `VerifiedUser` containing the UUID and signed
+   `is_anonymous` claim. Missing or non-boolean anonymous claims are rejected;
+   they are never assumed to mean a permanent account. Supabase documents this
+   as a required claim in its [JWT claims reference](https://supabase.com/docs/guides/auth/jwt-fields).
+   `main.py` chooses 50 for guests and `None` for permanent accounts. Request
+   JSON and user-editable metadata cannot override it. SQLite remains uncapped.
+2. Both single creation (including its first attempt) and CSV import acquire
+   the same per-owner transaction-level advisory lock before checking capacity
+   and inserting. The lock is namespaced and based on the owner UUID; permanent
+   additions also take it to coordinate in-flight requests during an upgrade.
+   This works across API workers and database pools. Separate lock/read queries
+   use PostgreSQL's default READ COMMITTED isolation level so a waiter counts
+   the previous committed additions. Transaction locks release on commit or
+   rollback. See [PostgreSQL advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS).
+3. Capacity failures return HTTP 403 with an account-upgrade/delete suggestion.
+   The existing frontend error handling retains the guest session, form values,
+   and import preview. Duplicate single creation still returns 409; repeated
+   imports at the cap skip existing numbers without adding reviews. A refreshed
+   permanent-account token removes the cap for the same UUID, without moving
+   records. An old guest token still carries its old claim until refreshed.
+
+Verification: all **158 backend tests** passed, including real disposable
+PostgreSQL tests for concurrent single saves/imports across separate pools,
+rollback, archived capacity, deleting to free space, independent owners,
+oversized imports, and same-UUID upgrade. All **28 mocked auth browser tests**
+and frontend lint passed. The two new browser checks verify that capacity errors
+preserve forms, previews, history, and guest sessions. This does not repeat live
+Supabase conversion, email delivery, or public hosting verification. The change
+takes effect when the hosted API starts with the updated code; the development
+APIs on ports 8001/8002 were not listening during this check.
+
+The problem cap bounds only saved problem count per guest. It does not bound
+review history, payload sizes, request volume, or the number of guests. CAPTCHA,
+operation limits, cleanup, and remaining live launch checks still need work.
+No provider settings, applied migrations, live records, or hosting were changed.
+
 ## Preserved local version
 
 `local-version` preserves the working SQLite app without authentication at

@@ -16,6 +16,7 @@ from psycopg.conninfo import make_conninfo
 import pytest
 
 from importing import ImportedProblem
+from guest_limits import ProblemLimitExceeded
 from migrate import MIGRATIONS, SchemaMismatch, check_schema, migrate
 from models import Problem, Review
 from postgres_storage import PostgresStore, open_pool
@@ -244,6 +245,94 @@ def test_runtime_cannot_change_schema_and_ungranted_role_cannot_read(database, s
     with psycopg.connect(make_conninfo(database, user="tracker_test_stranger")) as connection:
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute("SELECT * FROM tracker.problems")
+
+
+def test_guest_cap_counts_archived_and_delete_frees_capacity(stores):
+    alice, bob = stores
+    guest = PostgresStore(alice.pool, alice.user_id, problem_limit=2)
+    guest.save_problem_with_first_attempt(problem(1), review(1))
+    guest.save_problem_with_first_attempt(problem(2), review(2))
+    guest.save_problem_statement(1, "Keep this statement")
+    guest.archive_problem(1)
+    before = guest.get_all_problems(), guest.get_all_reviews()
+    with pytest.raises(ProblemLimitExceeded):
+        guest.save_problem_with_first_attempt(problem(3), review(3))
+    assert (guest.get_all_problems(), guest.get_all_reviews()) == before
+    assert guest.get_problem_statement(1) == ("Keep this statement", None)
+    with pytest.raises(DuplicateProblem):
+        guest.save_problem(problem(1))
+    guest.save_review(review(2))  # Existing practice remains available at capacity.
+    bob.save_problem(problem(3))  # Another owner has independent capacity.
+    assert guest.delete_problem(1)
+    guest.save_problem_with_first_attempt(problem(3), review(3))
+    assert [p.number for p in guest.get_all_problems()] == [2, 3]
+    assert bob.get_all_problems() == [problem(3)]
+
+
+def test_guest_import_capacity_is_distinct_repeat_safe_and_all_or_nothing(stores):
+    alice, _ = stores
+    guest = PostgresStore(alice.pool, alice.user_id, problem_limit=2)
+    guest.save_problem_with_first_attempt(problem(1), review(1))
+    before = guest.get_all_problems(), guest.get_all_reviews()
+    with pytest.raises(ProblemLimitExceeded):
+        guest.save_imported_problems([imported(1), imported(2), imported(3)])
+    assert (guest.get_all_problems(), guest.get_all_reviews()) == before
+    result = guest.save_imported_problems([imported(1), imported(2), imported(2)])
+    assert result.imported_numbers == [2]
+    assert result.skipped_existing_numbers == [1, 2]
+    assert guest.save_imported_problems([imported(1), imported(2)]).imported_numbers == []
+    assert len(guest.get_all_reviews()) == 2
+
+
+def test_older_guest_above_cap_preserves_records_and_reimports(stores):
+    alice, _ = stores
+    alice.save_imported_problems([imported(1), imported(2), imported(3)])
+    guest = PostgresStore(alice.pool, alice.user_id, problem_limit=2)
+    before = guest.get_all_problems(), guest.get_all_reviews()
+    assert guest.save_imported_problems([imported(1), imported(2)]).imported_numbers == []
+    with pytest.raises(ProblemLimitExceeded):
+        guest.save_problem(problem(4))
+    assert (guest.get_all_problems(), guest.get_all_reviews()) == before
+
+
+def test_failed_guest_save_releases_capacity_and_transaction_lock(stores, database):
+    alice, _ = stores
+    guest = PostgresStore(alice.pool, alice.user_id, problem_limit=1)
+    fail_review_for(database, 1)
+    with pytest.raises(StorageError):
+        guest.save_problem_with_first_attempt(problem(1), review(1))
+    assert guest.get_all_problems() == guest.get_all_reviews() == []
+    guest.save_problem_with_first_attempt(problem(2), review(2))
+    assert guest.get_all_problems() == [problem(2)]
+
+
+@pytest.mark.parametrize("methods", [("single", "single"), ("import", "import"), ("single", "import")])
+def test_concurrent_guest_additions_across_pools_cannot_exceed_cap(stores, database, methods):
+    alice, _ = stores
+    alice.save_problem_with_first_attempt(problem(1), review(1))
+    second_pool = open_pool(make_conninfo(database, user="tracker_test_runtime"), sslmode="disable")
+    guests = [PostgresStore(pool, alice.user_id, problem_limit=2) for pool in (alice.pool, second_pool)]
+    barrier = Barrier(2)
+
+    def add(store, method, number):
+        barrier.wait(timeout=10)
+        try:
+            if method == "single":
+                store.save_problem_with_first_attempt(problem(number), review(number))
+            else:
+                store.save_imported_problems([imported(number), imported(number)])
+            return "saved"
+        except ProblemLimitExceeded:
+            return "limited"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(add, store, method, number)
+                       for store, method, number in zip(guests, methods, [2, 3])]
+            assert sorted(f.result(timeout=15) for f in futures) == ["limited", "saved"]
+        assert len(alice.get_all_problems()) == len(alice.get_all_reviews()) == 2
+    finally:
+        second_pool.close()
 
 
 def test_missing_schema_rejected_without_creating_tables(database):

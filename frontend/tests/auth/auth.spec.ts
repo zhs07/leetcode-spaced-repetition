@@ -350,6 +350,59 @@ test('guest sign-in explains separate accounts and can return without replacing 
   await expect(page.getByText('Bob problem', { exact: true })).toBeVisible()
 })
 
+test('guest capacity error keeps the add form, history, and session available', async ({ page }) => {
+  const calls = await mockServices(page, { guestHistory: true })
+  await page.route('**/api/problems', route => route.fulfill({ status: 403, json: {
+    detail: 'Guest workspaces can save up to 50 problems. Create an account to keep your progress and add more, or delete a saved problem.',
+  } }))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Guest', exact: true }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Add problem', exact: true }).click()
+  await page.getByLabel('Problem number').fill('51')
+  await page.getByLabel('Name', { exact: true }).fill('Keep my form')
+  await page.getByLabel('Topic', { exact: true }).fill('Arrays')
+  await page.getByLabel('Record my first attempt').uncheck()
+  await page.getByRole('button', { name: 'Add problem', exact: true }).last().click()
+  await expect(page.getByRole('alert')).toContainText('up to 50 problems')
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Keep my form')
+  await page.getByRole('button', { name: 'Close form' }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create account', exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Guest', exact: true })).toBeVisible()
+  expect(calls.filter(call => call.path === '/auth/v1/signup')).toHaveLength(1)
+  expect(calls.some(call => call.path === '/auth/v1/logout')).toBeFalsy()
+})
+
+test('guest import capacity error retains preview and saves no visible new rows', async ({ page }) => {
+  await mockServices(page, { guestHistory: true })
+  await page.route('**/api/imports/notion/preview', route => route.fulfill({ json: {
+    problems: [{ problem: { number: 51, name: 'Over cap import', difficulty: 'Easy', topic: 'Arrays', notes: '',
+      first_attempt: { reviewed_on: '2026-10-02', mastery_level: 'Mastered' } }, total_attempts: 1 }],
+    errors: [], skipped_rows: 0,
+  } }))
+  await page.route('**/api/imports/notion', route => route.fulfill({ status: 403, json: {
+    detail: 'Guest workspaces can save up to 50 problems. Create an account to keep your progress and add more, or delete a saved problem.',
+  } }))
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Guest', exact: true }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Import CSV', exact: true }).click()
+  await page.getByLabel('Notion CSV file').setInputFiles({ name: 'capacity_all.csv', mimeType: 'text/csv', buffer: Buffer.from('synthetic preview fixture') })
+  await page.getByRole('button', { name: 'Preview import' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: 'Import 1 valid problem', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('up to 50 problems')
+  await expect(dialog.getByRole('rowheader', { name: /Over cap import/ })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Import 1 valid problem', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Close import' }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await expect(page.getByText('Over cap import', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Guest', exact: true })).toBeVisible()
+})
+
 test('disabled guest provider gives a recoverable error and keeps samples visible', async ({ page }) => {
   const calls = await mockServices(page, { guestDisabled: true })
   await page.goto('/')

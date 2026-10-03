@@ -14,6 +14,7 @@ import psycopg
 from psycopg_pool import ConnectionPool, PoolTimeout
 
 from importing import ImportedProblem, ImportSaveResult
+from guest_limits import ensure_problem_capacity
 from migrate import check_schema
 from models import Problem, Review
 from storage_errors import DuplicateProblem, ProblemNotFound, StorageError
@@ -41,10 +42,13 @@ def open_pool(database_url: str, *, sslmode: str = "require") -> ConnectionPool:
 class PostgresStore:
     pool: ConnectionPool
     user_id: UUID
+    problem_limit: int | None = None
 
     def __post_init__(self):
         if not isinstance(self.user_id, UUID) or self.user_id.int == 0:
             raise ValueError("A nonzero verified user UUID is required")
+        if self.problem_limit is not None and (type(self.problem_limit) is not int or self.problem_limit < 1):
+            raise ValueError("Problem limit must be a positive integer or None")
 
     @contextmanager
     def _connection(self):
@@ -88,12 +92,30 @@ class PostgresStore:
     def save_problem(self, problem: Problem) -> None:
         self.save_problem_with_first_attempt(problem)
 
+    def _check_problem_capacity(self, connection, requested_numbers: list[int]) -> None:
+        # Every addition uses the same per-owner transaction lock, including
+        # permanent-account requests during an upgrade. Acquire it before any
+        # row locks. Separate queries let a waiter see the previous commit at
+        # PostgreSQL's default READ COMMITTED isolation level.
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"tracker:problem-capacity:{self.user_id}",),
+        )
+        if self.problem_limit is None:
+            return
+        rows = connection.execute(
+            "SELECT number FROM tracker.problems WHERE user_id = %s",
+            (self.user_id,),
+        ).fetchall()
+        ensure_problem_capacity([row[0] for row in rows], requested_numbers, self.problem_limit)
+
     def save_problem_with_first_attempt(
         self, problem: Problem, first_attempt: Review | None = None,
     ) -> None:
         if first_attempt is not None and first_attempt.problem_number != problem.number:
             raise ValueError("First attempt must reference the same problem")
         with self._connection() as connection:
+            self._check_problem_capacity(connection, [problem.number])
             connection.execute("""
                 INSERT INTO tracker.problems
                     (user_id, number, name, difficulty, topic, notes, historical_attempts)
@@ -122,6 +144,7 @@ class PostgresStore:
     def save_imported_problems(self, imports: list[ImportedProblem]) -> ImportSaveResult:
         inserted = set()
         with self._connection() as connection:
+            self._check_problem_capacity(connection, [item.problem.number for item in imports])
             # A consistent lock order avoids deadlocks for overlapping batches
             # submitted in different CSV orders. Preserve output order below.
             for imported in sorted(imports, key=lambda item: item.problem.number):

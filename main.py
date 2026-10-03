@@ -11,6 +11,7 @@ from settings import Settings
 from postgres_storage import PostgresStore, open_pool
 from sqlite_store import SQLiteStore
 from storage_errors import DuplicateProblem, ProblemNotFound, StorageError
+from guest_limits import DEFAULT_GUEST_PROBLEM_LIMIT, ProblemLimitExceeded
 
 from models import Problem, Review
 from storage import initialize_database
@@ -39,8 +40,11 @@ def get_store(request: Request, credentials: Annotated[HTTPAuthorizationCredenti
         return SQLiteStore(DATABASE_PATH)
     if credentials is None:
         raise HTTPException(401, "Please sign in to continue.", headers={"WWW-Authenticate": "Bearer"})
-    user_id = request.app.state.verifier.verify(credentials.credentials)
-    return PostgresStore(request.app.state.pool, user_id)
+    user = request.app.state.verifier.verify(credentials.credentials)
+    return PostgresStore(
+        request.app.state.pool, user.user_id,
+        problem_limit=DEFAULT_GUEST_PROBLEM_LIMIT if user.is_anonymous else None,
+    )
 
 
 Store = Annotated[PostgresStore | SQLiteStore, Depends(get_store)]
@@ -109,6 +113,8 @@ def import_notion_csv(submission: ImportPreviewRequest, store: Store) -> ImportR
         saved = store.save_imported_problems(preview.problems)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except ProblemLimitExceeded as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except StorageError as error:
         raise HTTPException(
             status_code=500,
@@ -264,6 +270,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.exception_handler(StorageError)
     async def storage_failure(request: Request, error: StorageError):
+        if isinstance(error, ProblemLimitExceeded):
+            return JSONResponse(status_code=403, content={"detail": str(error)})
         if isinstance(error, ProblemNotFound):
             return JSONResponse(status_code=404, content={"detail": "Problem not found"})
         if isinstance(error, DuplicateProblem):
