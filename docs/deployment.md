@@ -6,6 +6,58 @@ The local hosted backend now connects successfully as the restricted runtime
 role. Real confirmation/recovery flows and public hosting remain unfinished.
 Running without hosted environment settings still selects SQLite.
 
+## Current launch scope - October 3
+
+The user wants convenient cloud access for personal use and the ability to share
+the app on Reddit for others to try. Keep anonymous guest creation, the sample
+tracker, account management, and same-UUID guest upgrades enabled. The first
+deployment remains fully free, with no domain purchase or payment details.
+
+The minimum remaining work is hosting configuration, essential authentication
+and ownership checks, persistence verification on the deployed service, and
+working public signup/recovery email delivery. CAPTCHA, additional request
+limits, review-history caps, and automatic guest cleanup are deferred follow-up
+work rather than blockers for this small launch. Existing guest problem caps,
+input protections, and Supabase authentication rate limits remain in place.
+Guest creation remains publicly callable; deferring these controls accepts the
+remaining possibility of automated account creation and resource consumption.
+
+The public email provider is not yet selected or configured. Existing permanent
+account login and guest access do not establish that outside users can receive
+signup, upgrade, or recovery emails. Custom SMTP is still needed for those flows.
+Render was opened at its sign-in page; account access is pending. No Render
+services have been created. The user continues to handle commits and pushes.
+
+### Database TLS verification completed
+
+The runtime pool now defaults to `sslmode=verify-full`, including when an older
+connection URL requests `require`. It uses Supabase's public root CA bundled in
+`certificates/supabase-prod-ca-2021.crt`, unless the URL explicitly supplies a
+different `sslrootcert`. The bundled file is public certificate material, not a
+credential, and avoids a Mac-specific certificate path on Render. Disposable
+PostgreSQL tests still explicitly use `sslmode="disable"` on their private Unix
+socket. The migration CLI was not run or changed.
+
+Read-only live checks on October 3 verified:
+
+- The existing restricted runtime connection and the actual `open_pool` default
+  both connect with TLS and `verify-full`.
+- Wrong CA and wrong hostname checks both fail certificate verification.
+- Tracker row counts were 70 problems, 70 reviews, and one statement before and
+  after the checks; no application records were modified.
+- Neither `anon` nor `authenticated` has tracker schema access or SELECT/INSERT
+  privileges on `tracker.problems`. A live authenticated REST rejection probe
+  and real-user isolation check remain separate checks.
+
+Validation: 59 authentication/PostgreSQL regression tests passed on disposable
+databases; frontend production build and lint passed; `git diff --check` passed.
+The database tests required approved escalation because the sandbox blocked
+temporary PostgreSQL initialization. These checks do not verify a Render build
+or public email delivery.
+
+Certificate source and maintenance details are in `certificates/README.md`.
+See [Supabase's certificate/psql guide](https://supabase.com/docs/guides/database/psql).
+
 ## Provider setup progress
 
 Project `leetcode-tracker` (`stqydfklcxicvffqoycs`) is active in `us-west-1`.
@@ -52,9 +104,10 @@ The runtime connects through the dashboard-provided session pooler
 client-to-pooler TLS, and denied schema/migration-history modifications. The
 database-side `pg_stat_ssl` describes the separate pooler-to-database hop; use
 `connection.pgconn.ssl_in_use` to inspect the local client connection.
-The application currently uses `sslmode=require`; a separate `verify-full`
+At initial setup the application used `sslmode=require`; a separate `verify-full`
 probe using the public certifi bundle failed certificate validation. Full
-database certificate/hostname verification is not yet configured.
+database certificate/hostname verification was completed October 3 using the
+Supabase CA, as recorded above.
 
 A live storage smoke test used two generated owner UUIDs and verified separate
 records for the same number, reviews, statements, archive/delete isolation, and
@@ -109,11 +162,12 @@ change. The tests separately exercise provider-reported expiry, a failed code
 exchange, a missing browser verifier, and successful confirmation/recovery.
 They do not send real email or replace the remaining live-account checks.
 
-Still required: guest abuse controls and cleanup before public launch; SMTP for
-public email sign-up; live confirmation callback and recovery
-checks; two-real-account isolation tests; an authenticated Data API rejection
-probe; full database certificate/hostname verification; and hosting. The later
-configuration checklist describes the full setup, including completed steps.
+Still required for the current launch: SMTP for public email sign-up; applicable
+live confirmation callback and recovery checks; real-user isolation checks; an
+authenticated Data API rejection probe; and hosting. Additional guest abuse
+controls and cleanup are deferred under the current scope above. Database
+certificate/hostname verification is complete. The later configuration checklist
+describes the broader setup, including completed and deferred steps.
 
 ## Fully free launch preparation
 
@@ -150,8 +204,9 @@ Render is separate from configuring GitHub as a tracker login provider.
 `render.yaml` defines the two hosting services with automatic deploys disabled,
 the API explicitly on `plan: free`, and dashboard prompts for configuration.
 It creates no Render database, disk, or migration job. Creating a Blueprint
-still triggers an initial public deployment: do not apply it until the
-remaining live isolation, authentication, and database TLS checks are complete.
+still triggers an initial public deployment. Review the current launch scope
+and remaining live isolation/authentication checks before applying it; database
+TLS verification is now complete.
 No Render resources have been created during this preparation.
 
 | Service | Dashboard value | How to fill it |

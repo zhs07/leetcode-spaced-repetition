@@ -8,9 +8,11 @@ run migrations, or touch the legacy SQLite database.
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from uuid import UUID
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 from psycopg_pool import ConnectionPool, PoolTimeout
 
 from importing import ImportedProblem, ImportSaveResult
@@ -20,13 +22,20 @@ from models import Problem, Review
 from storage_errors import DuplicateProblem, ProblemNotFound, StorageError
 
 
-def open_pool(database_url: str, *, sslmode: str = "require") -> ConnectionPool:
-    """Open a bounded pool; local tests may explicitly disable TLS."""
+def open_pool(database_url: str, *, sslmode: str = "verify-full") -> ConnectionPool:
+    """Verify Supabase's certificate and hostname; local tests may disable TLS."""
     if not database_url.strip():
         raise ValueError("A PostgreSQL database URL is required")
+    connection_options = {"sslmode": sslmode, "connect_timeout": 10}
+    if sslmode == "verify-full":
+        # Honor an explicitly supplied CA file; otherwise use Supabase's public
+        # root certificate, bundled so Render needs no Mac-specific file path.
+        connection_options["sslrootcert"] = conninfo_to_dict(database_url).get(
+            "sslrootcert", str(Path(__file__).resolve().parent / "certificates" / "supabase-prod-ca-2021.crt"),
+        )
     pool = ConnectionPool(
         database_url, min_size=1, max_size=4, timeout=10, max_waiting=16,
-        kwargs={"sslmode": sslmode, "connect_timeout": 10}, open=False,
+        kwargs=connection_options, open=False,
     )
     try:
         pool.open(wait=True, timeout=10)
