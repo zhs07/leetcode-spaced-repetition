@@ -2,9 +2,12 @@
 
 Status: Render frontend and API deployed October 3, 2026, using the existing
 Supabase project and restricted runtime database role. Guest access works on
-the public site. Public signup/upgrade/recovery email delivery and remaining
-live-account checks are unfinished. Running without hosted environment settings
-still selects SQLite locally.
+the public site. Existing-account login, collection retention, two-user isolation,
+and direct Data API access checks are user-verified. Public signup confirmation
+delivery, automatic callback sign-in, password recovery, and login with the new
+password are also user-verified. Test emails landed in Spam; inbox placement
+remains a limitation. Running without hosted
+environment settings still selects SQLite locally.
 
 ## Current launch scope - October 3
 
@@ -14,18 +17,23 @@ tracker, account management, and same-UUID guest upgrades enabled. The first
 deployment remains fully free, with no domain purchase or payment details.
 
 Hosting configuration, public API authentication/CORS checks, and guest
-persistence verification on the deployed service are complete. Remaining work
-is existing-account sign-in, the live ownership checks below, and working public
-signup/recovery email delivery. CAPTCHA, additional request
-limits, review-history caps, and automatic guest cleanup are deferred follow-up
-work rather than blockers for this small launch. Existing guest problem caps,
+persistence verification on the deployed service are complete. Public signup
+confirmation, callback sign-in, password recovery, and subsequent login with
+the new password are user-verified. This completes the current SMTP configuration
+and core email-flow checks. Spam placement is recorded below. A separate public
+guest-upgrade test with Gmail SMTP has not been recorded; the same-UUID upgrade
+implementation was verified earlier. CAPTCHA, additional request limits,
+review-history caps, and automatic guest cleanup are deferred follow-up work
+rather than blockers for this small launch. Existing guest problem caps,
 input protections, and Supabase authentication rate limits remain in place.
 Guest creation remains publicly callable; deferring these controls accepts the
 remaining possibility of automated account creation and resource consumption.
 
-The public email provider is not yet selected or configured. Existing permanent
-account login and guest access do not establish that outside users can receive
-signup, upgrade, or recovery emails. Custom SMTP is still needed for those flows.
+Gmail SMTP has been saved and verified after a dashboard reload. The user
+received confirmation at the corrected non-team Gmail address and automatically
+signed in after opening the link in the same incognito window that requested it.
+The user also verified the recovery email, reset callback, new password save,
+and subsequent sign-in. Both confirmation and recovery messages landed in Spam.
 The user created and verified their Render account, committed/pushed the TLS
 change, and explicitly approved transferring the existing runtime connection
 to Render and deploying both services publicly. The user continues to handle
@@ -75,10 +83,76 @@ and guest identity are retained in their separate test workspace. A live SQL
 check found 71 problems, 70 reviews, and one statement, including exactly one
 labelled deployment-test record owned by an anonymous user.
 
-Public email SMTP is not configured yet. Existing-account login on the public
-origin still needs the user's own sign-in. Full live two-user read/write
-isolation and an authenticated direct Data API rejection probe remain open;
-the earlier disposable-database auth/isolation tests are separate evidence.
+Public email SMTP is configured as recorded below; signup confirmation delivery
+and callback sign-in are user-verified. The user reported successful login
+to their existing account on the public origin with all saved data preserved.
+They subsequently reported that two-user isolation and direct Data API access
+checks were verified. These are user-reported live results; this session did
+not independently repeat those checks. Earlier disposable-database auth/isolation
+tests remain separate evidence.
+
+### Public email setup — Gmail SMTP
+
+The user selected their existing Gmail account as the sending account and
+reported generating a Google app password. Google's 2-Step Verification applies
+to that sender account; tracker users still confirm their email and use their
+tracker password. No app password is stored in this repository or collected in chat.
+
+The user entered the sender address, username, and app password directly in
+Supabase and saved the configuration. A dashboard reload verified that custom
+SMTP remains enabled with the settings below and a stored password. The password
+was not revealed or read. Configuration persistence does not verify delivery.
+
+| Setting | Value |
+| --- | --- |
+| Enable custom SMTP | On |
+| Sender email address | The Gmail account that generated the app password |
+| Sender name | `zhs` (user-selected) |
+| Host | `smtp.gmail.com` |
+| Port | `587` |
+| Minimum interval per user | `60` seconds |
+| Username | Same full Gmail address as the sender |
+| Password | Google app password, entered privately in Supabase |
+
+Supabase displays a warning that Gmail is intended for personal rather than
+transactional email and deliverability may be affected. Signup confirmation and
+password recovery delivery are user-verified for one non-team Gmail address,
+but the messages landed in Spam. This does not establish inbox placement or
+delivery to every mailbox provider. Gmail's sending limits also apply. A live
+check of Supabase's Rate Limits page verified the saved email limit is
+**30 per hour**.
+SMTP configuration takes effect in Supabase; no Render redeploy is needed.
+
+First live delivery troubleshooting on October 3: Auth logs at 20:07 UTC show
+`/signup` returning 200 with `user_confirmation_requested` and no SMTP error.
+An earlier request at 20:05 UTC recorded `user_repeated_signup`. The user had
+not received the confirmation email at the time of inspection. A successful
+Auth response does not establish receipt or callback success. The user then
+reported finding the confirmation in the sending Gmail's Sent folder. Read-only
+inspection of that message's expanded recipient header found a typo: the
+recipient domain was `gmaiil.com` rather than `gmail.com`. No recent delivery
+failure notice appeared in a focused Gmail search. The user retried with the
+corrected non-team Gmail address, received the email, and reported automatic
+sign-in after opening the confirmation link in the same incognito window.
+This verifies public signup email delivery and the PKCE callback for that test
+account. No credentials were read or changed by the assistant during these checks.
+
+The user subsequently completed password recovery with the separate test
+account: reset email received, callback opened in the originating incognito
+window, new password saved, and successful sign-in with the new password.
+Confirmation and recovery delivery and callbacks are therefore user-verified.
+The user reported that all test messages were received in Spam. The exact filter
+reason has not been verified. Marking a legitimate message Not spam can help
+that receiving mailbox, but is not proof of inbox placement for other visitors.
+
+The same-UUID guest upgrade implementation was verified earlier; its public-site
+flow with this SMTP provider has not yet been separately recorded. Leave the
+personal collection untouched.
+
+References: [Google SMTP](https://developers.google.com/workspace/gmail/imap/imap-smtp),
+[Google app passwords](https://support.google.com/accounts/answer/185833),
+[Gmail limits](https://support.google.com/mail/answer/22839),
+[Supabase custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp).
 
 ### Database TLS verification completed
 
@@ -98,8 +172,8 @@ Read-only live checks on October 3 verified:
 - Tracker row counts were 70 problems, 70 reviews, and one statement before and
   after the checks; no application records were modified.
 - Neither `anon` nor `authenticated` has tracker schema access or SELECT/INSERT
-  privileges on `tracker.problems`. A live authenticated REST rejection probe
-  and real-user isolation check remain separate checks.
+  privileges on `tracker.problems`. The user subsequently reported successful
+  live two-user isolation and direct Data API access verification, as recorded above.
 
 Validation: 59 authentication/PostgreSQL regression tests passed on disposable
 databases; frontend production build and lint passed; `git diff --check` passed.
@@ -131,8 +205,9 @@ changing the plan or provisioning additional resources.
 - Verified `anon` and `authenticated` have no schema access or read/write grants
   on any tracker table. A live anonymous REST request selecting the `tracker`
   schema returned HTTP 406 / `PGRST106`; only `public` and `graphql_public` were
-  exposed. A real authenticated REST probe is still pending. Security advisors
-  returned no findings. No personal records were imported.
+  exposed. The user subsequently reported direct Data API access verification,
+  as recorded above. Security advisors returned no findings. No personal records
+  were imported.
 - Verified email sign-in and confirmation are enabled, and the public JWKS
   advertises an ES256 key. Anonymous sign-ins were disabled at initial setup;
   they were later enabled with approval and verified below. Saved an eight-character
@@ -214,10 +289,12 @@ change. The tests separately exercise provider-reported expiry, a failed code
 exchange, a missing browser verifier, and successful confirmation/recovery.
 They do not send real email or replace the remaining live-account checks.
 
-Still required for the current launch: SMTP for public email sign-up; applicable
-live confirmation callback and recovery checks; real-user isolation checks; an
-authenticated Data API rejection probe; and hosting. Additional guest abuse
-controls and cleanup are deferred under the current scope above. Database
+The current SMTP setup and core public signup/recovery checks are complete,
+with Spam placement as a known limitation. A separate public guest-upgrade test
+with Gmail SMTP has not been recorded. Gmail SMTP is saved. Hosting is live;
+existing-account login, collection retention, two-user isolation, and direct
+Data API access checks are user-verified as recorded above. Additional guest
+abuse controls and cleanup are deferred under the current scope above. Database
 certificate/hostname verification is complete. The later configuration checklist
 describes the broader setup, including completed and deferred steps.
 
@@ -231,7 +308,10 @@ documents suspension/build limits when included usage is exhausted without a
 payment method; the backend also sleeps after 15 idle minutes and can take
 about a minute to wake. See [Render Free](https://render.com/docs/free).
 
-Email delivery remains unresolved. A free sending allowance does not establish
+Gmail SMTP is now configured above; signup confirmation delivery and automatic
+callback sign-in and password recovery are user-verified, with Spam placement
+recorded as a limitation. Earlier provider
+research found that a free sending allowance does not establish
 that an account can send reliable authentication email without a domain:
 
 - [Resend](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)
@@ -243,7 +323,7 @@ that an account can send reliable authentication email without a domain:
   permits individual sender verification but warns that freemail senders can
   fail delivery. This has not been provisioned or tested for this project.
 
-The recommended domain-free alternative is
+An earlier proposed domain-free alternative was
 [GitHub sign-in through Supabase](https://supabase.com/docs/guides/auth/social-login/auth-github).
 This would let public users sign in with GitHub instead of receiving signup or
 password-reset email from the tracker. It is a proposed login choice, not yet
