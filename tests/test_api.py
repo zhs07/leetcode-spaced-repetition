@@ -163,7 +163,7 @@ def test_problem_summaries_include_reviewed_and_unreviewed(tmp_path, monkeypatch
         by_number[summary["number"]] = summary
 
     assert by_number[1]["mastery_level"] == "Partial Recall"
-    assert by_number[1]["next_review"] == "2026-09-24"
+    assert by_number[1]["next_review"] == "2026-09-25"
     assert by_number[1]["attempts"] == 2
 
     assert by_number[206]["mastery_level"] is None
@@ -203,7 +203,7 @@ def test_post_problem_with_first_attempt(tmp_path, monkeypatch):
             "name": "Two Sum",
             "difficulty": "Easy",
             "topic": "Arrays & Hashing",
-            "next_review": "2026-10-01",
+            "next_review": "2026-10-02",
             "mastery_level": "Partial Recall",
             "notes": "",
             "attempts": 1,
@@ -309,7 +309,7 @@ def test_archive_restore_and_practice_flow(tmp_path, monkeypatch, has_history):
         # A repeated restore of an active problem must preserve its new schedule.
         assert client.post("/problems/1/restore").json() == {"restored": True}
         summary = client.get("/problems/summary").json()[0]
-        assert summary["next_review"] == "2026-10-07"
+        assert summary["next_review"] == "2026-10-14"
         assert summary["attempts"] == int(has_history) + 1
         assert summary["mastery_level"] == "Solved Independently"
         assert client.get("/reviews").json() == original_reviews + [attempt]

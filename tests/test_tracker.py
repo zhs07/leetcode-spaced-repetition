@@ -78,17 +78,17 @@ def test_get_due_problems_includes_due_today_and_overdue():
     reviews = [
     Review(
         problem_number = 1,
-        reviewed_on = date(2026, 9, 12),
+        reviewed_on = date(2026, 9, 5),
         mastery_level = "Solved Independently"
     ),
     Review(
         problem_number = 2,
-        reviewed_on = date(2026, 9, 13),
+        reviewed_on = date(2026, 9, 6),
         mastery_level = "Solved Independently"
     ),
     Review(
         problem_number = 3,
-        reviewed_on = date(2026, 9, 14),
+        reviewed_on = date(2026, 9, 7),
         mastery_level = "Solved Independently"
     )
     ]

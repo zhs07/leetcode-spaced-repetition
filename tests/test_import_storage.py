@@ -68,7 +68,7 @@ def test_batch_saves_metadata_counts_and_one_latest_review(database_path):
     ]
     summaries = [build_problem_summary(problem, reviews) for problem in problems]
     assert [summary.attempts for summary in summaries] == [4, 1]
-    assert all(summary.next_review == date(2026, 9, 24) for summary in summaries)
+    assert all(summary.next_review == date(2026, 10, 10) for summary in summaries)
 
 
 def test_batch_skips_existing_archived_problem_without_changing_history(database_path):

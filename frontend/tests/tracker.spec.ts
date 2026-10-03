@@ -22,8 +22,8 @@ test('create problems, protect notes, record attempts, and display API errors', 
   await expect(page.getByText('Use a hashmap to remember complements.')).not.toBeVisible()
 
   for (const attempt of [
-    { date: '2026-09-20', mastery: 'Solved Independently', next: 'Sep 27, 2026', count: '1' },
-    { date: '2026-09-22', mastery: 'Partial Recall', next: 'Sep 24, 2026', count: '2' },
+    { date: '2026-09-20', mastery: 'Solved Independently', next: 'Oct 4, 2026', count: '1' },
+    { date: '2026-09-22', mastery: 'Partial Recall', next: 'Sep 25, 2026', count: '2' },
   ]) {
     await page.getByRole('button', { name: 'Record attempt for Two Sum' }).click()
     await page.getByLabel('Completion date').fill(attempt.date)
@@ -289,7 +289,7 @@ test('archive preserves history and notes; restoring resumes due practice and no
   await expect(page.getByRole('rowheader', { name: 'Archive workflow', exact: true })).toHaveCount(0)
   await show.selectOption('all')
   await expect(reviewedRow.getByRole('cell').nth(5)).toHaveText('2')
-  await expect(reviewedRow).toContainText('In 7d')
+  await expect(reviewedRow).toContainText('In 14d')
   await expect(page.getByRole('rowheader', { name: 'Archive for later', exact: true })).toHaveCount(0)
 })
 

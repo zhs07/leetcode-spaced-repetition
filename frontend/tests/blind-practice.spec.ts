@@ -65,7 +65,7 @@ test('real due selection stays blind, cached statements persist, and recording u
   await expect(page.getByText('Attempt recorded.', { exact: true })).toBeVisible()
   const summary = await (await page.request.get('/api/problems/13001/summary')).json()
   expect(summary.attempts).toBe(2)
-  expect(summary.next_review).toBe('2999-01-08')
+  expect(summary.next_review).toBe('2999-01-15')
   await page.reload()
   await open(page)
   await expect(dialog.getByRole('alert')).toContainText('no due or overdue problems')

@@ -104,6 +104,39 @@ def notion_row(number=101, **changes):
     }
 
 
+@pytest.mark.parametrize("mastery, exported_interval, next_review", [
+    ("🔵 Mastered", "14", "2026-10-10"),
+    ("🟢 Solved Independently", "7", "2026-09-24"),
+    ("🟡 Solved With Struggle", "3", "2026-09-17"),
+])
+def test_older_export_intervals_use_current_schedule(
+    import_client, mastery, exported_interval, next_review,
+):
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        stream, fieldnames=[*NOTION_DATA_COLUMNS, "Review Interval (Days)"],
+    )
+    writer.writeheader()
+    writer.writerow({
+        **notion_row(Mastery=mastery), "Review Interval (Days)": exported_interval,
+    })
+    payload = {"csv_text": stream.getvalue()}
+
+    preview = import_client.post("/imports/notion/preview", json=payload)
+    assert preview.status_code == 200
+    assert preview.json()["errors"] == []
+    assert len(preview.json()["problems"]) == 1
+    assert get_all_problems(main.DATABASE_PATH) == []
+
+    imported = import_client.post("/imports/notion", json=payload)
+    assert imported.status_code == 200
+    assert imported.json()["imported_numbers"] == [101]
+    summary = import_client.get("/problems/summary").json()[0]
+    assert summary["next_review"] == next_review
+    assert summary["attempts"] == 4
+    assert len(get_all_reviews(main.DATABASE_PATH)) == 1
+
+
 def test_confirm_import_saves_valid_rows_and_repeat_preserves_counts(import_client):
     existing = Problem(101, "Existing name", "Hard", "Graphs", "Existing notes")
     save_problem(main.DATABASE_PATH, existing)
@@ -131,7 +164,7 @@ def test_confirm_import_saves_valid_rows_and_repeat_preserves_counts(import_clie
     assert before_reviews == [review, Review(102, date(2026, 9, 10), "Mastered")]
     summaries = import_client.get("/problems/summary").json()
     assert summaries[1]["attempts"] == 4
-    assert summaries[1]["next_review"] == "2026-09-24"
+    assert summaries[1]["next_review"] == "2026-10-10"
 
     repeated = import_client.post("/imports/notion", json={"csv_text": text})
     assert repeated.json()["imported_numbers"] == []

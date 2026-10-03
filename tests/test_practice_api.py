@@ -37,8 +37,8 @@ def seed(number, reviewed_on=None, historical_attempts=0):
 
 
 def test_random_pick_uses_only_saved_due_active_problems_without_recording_attempt(practice_client, monkeypatch):
-    seed(1, date(2026, 9, 1))
-    seed(2, date(2026, 9, 17))  # Exactly due today.
+    seed(1, date(2026, 8, 31))  # Overdue.
+    seed(2, date(2026, 9, 1))  # Exactly due today.
     seed(3, date(2026, 10, 1))  # Future review.
     seed(4, date(2026, 9, 1))
     archive_problem(main.DATABASE_PATH, 4)
@@ -133,7 +133,7 @@ def test_recording_blind_attempt_updates_correct_problem_and_normal_schedule(pra
     assert response.status_code == 201
     summary = practice_client.get("/problems/1/summary").json()
     assert summary["attempts"] == 5
-    assert summary["next_review"] == "2026-10-08"
+    assert summary["next_review"] == "2026-10-15"
     assert summary["name"] == "Hidden name 1"
     assert practice_client.post("/practice/random").status_code == 404
 

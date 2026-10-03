@@ -76,7 +76,7 @@ def test_imported_count_persists_and_new_attempt_increments_total(tmp_path):
     assert reviews == [latest_attempt]
     summary = build_problem_summary(loaded, reviews)
     assert summary.attempts == 4
-    assert summary.next_review == date(2026, 9, 24)
+    assert summary.next_review == date(2026, 10, 10)
 
     new_attempt = Review(1, date(2026, 10, 1), "Solved Independently")
     save_review(database_path, new_attempt)
@@ -86,7 +86,7 @@ def test_imported_count_persists_and_new_attempt_increments_total(tmp_path):
     assert reviews == [latest_attempt, new_attempt]
     summary = build_problem_summary(loaded, reviews)
     assert summary.attempts == 5
-    assert summary.next_review == date(2026, 10, 8)
+    assert summary.next_review == date(2026, 10, 15)
 
     archive_problem(database_path, 1)
     summary = build_problem_summary(get_all_problems(database_path)[0], reviews)

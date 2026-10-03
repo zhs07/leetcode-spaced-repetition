@@ -51,7 +51,7 @@ test('CSV preview, confirmed import, totals, repeated import and new attempt per
   await expect(page.getByRole('combobox', { name: 'Show', exact: true })).toHaveValue('all')
   const importedRow = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Imported practice', exact: true }) })
   await expect(importedRow.getByRole('cell').nth(5)).toHaveText('4')
-  await expect(importedRow.locator('time')).toHaveAttribute('datetime', '2026-09-24')
+  await expect(importedRow.locator('time')).toHaveAttribute('datetime', '2026-10-10')
   await expect(page.getByRole('rowheader', { name: 'Keep existing practice', exact: true })).toBeVisible()
   await expect(page.getByText(notes, { exact: true })).not.toBeVisible()
   await importedRow.getByRole('button', { name: 'Show notes' }).click()
@@ -74,7 +74,7 @@ test('CSV preview, confirmed import, totals, repeated import and new attempt per
   await page.getByRole('button', { name: 'Save attempt', exact: true }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
   await expect(importedRow.getByRole('cell').nth(5)).toHaveText('5')
-  await expect(importedRow.locator('time')).toHaveAttribute('datetime', '2026-10-08')
+  await expect(importedRow.locator('time')).toHaveAttribute('datetime', '2026-10-15')
 })
 
 test('invalid files, zero valid rows, replacing a preview and cancellation never save', async ({ page }) => {

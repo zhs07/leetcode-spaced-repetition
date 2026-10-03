@@ -33,6 +33,9 @@ a foreign key to the saved problem and are removed when it is deleted.
 
 ## Importing from Notion
 
+This importer supports the original project's Notion layout, rather than
+arbitrary CSV files or every Notion database. The expected format is below.
+
 Click **Import CSV**, choose the exported CSV (prefer the fuller `_all.csv`
 export), and click **Preview import**. Check the valid problems and reported
 row errors, then confirm. Nothing is saved during preview. Invalid and empty
@@ -42,8 +45,8 @@ The supported columns are `Problem`, `Difficulty`, `Topic`, `Last Reviewed`,
 `Mastery`, `Pattern/Trick`, and `Reviews`. Titles must end with a positive
 problem number, dates use a format such as `September 10, 2026`, and mastery
 supports the exported labels 🔵 Mastered, 🟢 Solved Independently, and
-🟡 Solved With Struggle. If `Review Interval (Days)` is included, it must match
-the app's mastery schedule. Relative exported review-status text is ignored.
+🟡 Solved With Struggle. Exported `Review Interval (Days)` and review-status
+columns are ignored; the app uses its current [review intervals](../README.md#review-intervals).
 
 Notion exports contain only the latest review and total attempts. The import
 stores that one review plus an older-attempt count, without inventing review

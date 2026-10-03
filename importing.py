@@ -7,7 +7,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from scheduler import REVIEW_INTERVALS
 from schemas import AttemptCreate, ProblemCreate
 
 
@@ -99,7 +98,8 @@ def parse_notion_row(row: dict[str, str]) -> ImportedProblem | None:
     Pydantic's ValidationError is also a subclass of ValueError.
 
     Keep Reviews as a total count, including the latest known attempt.
-    Ignore Review Status: the app calculates it from the date and mastery.
+    Ignore Review Status and Review Interval (Days): the app calculates the
+    schedule from the date and mastery, including for exports using older intervals.
     """
     # The empty Notion record has a calculated interval of 0. Check source
     # fields only, so that calculated value does not make it look populated.
@@ -117,12 +117,6 @@ def parse_notion_row(row: dict[str, str]) -> ImportedProblem | None:
         raise ValueError("Unkown Label")
 
     attempt = AttemptCreate(reviewed_on=reviewed_on, mastery_level=mastery)
-
-    if "Review Interval (Days)" in row:
-        review_interval = int(row["Review Interval (Days)"])
-
-        if REVIEW_INTERVALS[mastery] != review_interval:
-            raise ValueError
 
     problem = ProblemCreate(
         number=name_num[1],

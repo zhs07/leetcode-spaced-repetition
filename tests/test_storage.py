@@ -434,7 +434,7 @@ def test_restored_problem_is_due_until_an_attempt_is_saved(tmp_path):
     
     assert problems[0].review_due_on is None
     assert reviews == [old_review, new_review]
-    assert summary.next_review == date(2026, 10, 7)
+    assert summary.next_review == date(2026, 10, 14)
     assert summary.attempts == 2
     assert get_due_problems(problems, reviews, today) == []
     

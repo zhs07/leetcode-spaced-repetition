@@ -106,7 +106,7 @@ def test_archive_restore_and_record_attempt_preserve_schedule(stores):
     alice.save_review(Review(1, today, "Solved Independently"))
     assert alice.restore_problem(1, date(2026, 10, 4))
     summary = build_problem_summary(alice.get_all_problems()[0], alice.get_all_reviews())
-    assert summary.next_review == date(2026, 10, 9)
+    assert summary.next_review == date(2026, 10, 16)
     assert summary.attempts == 2
     assert bob.get_all_reviews() == [review()]
 
