@@ -108,6 +108,8 @@ def notion_row(number=101, **changes):
     ("🔵 Mastered", "14", "2026-10-10"),
     ("🟢 Solved Independently", "7", "2026-09-24"),
     ("🟡 Solved With Struggle", "3", "2026-09-17"),
+    ("🟠 Partial Recall", "2", "2026-09-13"),
+    ("🔴 Learned Solution", "1", "2026-09-11"),
 ])
 def test_older_export_intervals_use_current_schedule(
     import_client, mastery, exported_interval, next_review,
@@ -135,6 +137,41 @@ def test_older_export_intervals_use_current_schedule(
     assert summary["next_review"] == next_review
     assert summary["attempts"] == 4
     assert len(get_all_reviews(main.DATABASE_PATH)) == 1
+
+
+@pytest.mark.parametrize("label, canonical, next_review", [
+    ("Learned Solution", "Learned Solution", "2026-09-11"),
+    ("Partial Recall", "Partial Recall", "2026-09-13"),
+    ("Solved with Struggle", "Solved with Struggle", "2026-09-17"),
+    ("Solved Independently", "Solved Independently", "2026-09-24"),
+    ("Mastered", "Mastered", "2026-10-10"),
+    ("  🟡 partial recall  ", "Partial Recall", "2026-09-13"),
+    ("🟣 Learned Solution", "Learned Solution", "2026-09-11"),
+])
+def test_notion_mastery_text_with_optional_circle(import_client, label, canonical, next_review):
+    payload = {"csv_text": notion_csv([notion_row(Mastery=label)])}
+    preview = import_client.post("/imports/notion/preview", json=payload)
+    assert preview.status_code == 200
+    assert preview.json()["errors"] == []
+    assert preview.json()["problems"][0]["problem"]["first_attempt"]["mastery_level"] == canonical
+    assert get_all_reviews(main.DATABASE_PATH) == []
+    imported = import_client.post("/imports/notion", json=payload)
+    assert imported.json()["imported_numbers"] == [101]
+    summary = import_client.get("/problems/101/summary").json()
+    assert summary["mastery_level"] == canonical
+    assert summary["next_review"] == next_review
+    assert summary["attempts"] == 4
+    assert len(get_all_reviews(main.DATABASE_PATH)) == 1
+
+
+@pytest.mark.parametrize("label", ["", "🟠 Unknown", "🔴", "Almost Mastered"])
+def test_unknown_notion_mastery_is_row_error_without_writes(import_client, label):
+    payload = {"csv_text": notion_csv([notion_row(Mastery=label)])}
+    for path in ("/imports/notion/preview", "/imports/notion"):
+        response = import_client.post(path, json=payload)
+        assert response.status_code == 200
+        assert response.json()["errors"] == [{"row_number": 2, "message": "Unknown Notion mastery label"}]
+    assert get_all_problems(main.DATABASE_PATH) == get_all_reviews(main.DATABASE_PATH) == []
 
 
 def test_confirm_import_saves_valid_rows_and_repeat_preserves_counts(import_client):

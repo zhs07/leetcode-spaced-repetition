@@ -79,8 +79,11 @@ rows are excluded; existing problem numbers keep their data and history.
 The supported columns are `Problem`, `Difficulty`, `Topic`, `Last Reviewed`,
 `Mastery`, `Pattern/Trick`, and `Reviews`. Titles must end with a positive
 problem number, dates use a format such as `September 10, 2026`, and mastery
-supports the exported labels 🔵 Mastered, 🟢 Solved Independently, and
-🟡 Solved With Struggle. Exported `Review Interval (Days)` and review-status
+supports all five levels: Learned Solution, Partial Recall, Solved with Struggle,
+Solved Independently, and Mastered. Labels are case-insensitive and may have a
+leading colored-circle emoji, such as 🔴 Learned Solution, 🟠 Partial Recall,
+🟡 Solved With Struggle, 🟢 Solved Independently, or 🔵 Mastered. The color does
+not determine mastery. Exported `Review Interval (Days)` and review-status
 columns are ignored; the app uses its current [review intervals](../README.md#review-intervals).
 
 Notion exports contain only the latest review and total attempts. The import

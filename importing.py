@@ -59,11 +59,13 @@ NOTION_DATA_COLUMNS = (
     "Reviews",
 )
 
-# These are the three mastery labels present in your current Notion export.
+# Match mastery text independently of the optional Notion circle color.
 NOTION_MASTERY_LABELS = {
-    "🔵 Mastered": "Mastered",
-    "🟢 Solved Independently": "Solved Independently",
-    "🟡 Solved With Struggle": "Solved with Struggle",
+    "learned solution": "Learned Solution",
+    "partial recall": "Partial Recall",
+    "solved with struggle": "Solved with Struggle",
+    "solved independently": "Solved Independently",
+    "mastered": "Mastered",
 }
 
 STANDARD_REQUIRED_COLUMNS = ("number", "name", "difficulty", "topic")
@@ -167,9 +169,10 @@ def parse_notion_row(row: dict[str, str]) -> ImportedProblem | None:
     parsed_datetime = datetime.strptime(date_text, "%B %d, %Y")
     reviewed_on = parsed_datetime.date()
 
-    mastery = NOTION_MASTERY_LABELS.get(row["Mastery"].strip())
+    mastery_text = re.sub(r"^[🔴🟠🟡🟢🔵🟣🟤⚫⚪]\ufe0f?\s*", "", row["Mastery"].strip())
+    mastery = NOTION_MASTERY_LABELS.get(mastery_text.casefold())
     if mastery is None:
-        raise ValueError("Unkown Label")
+        raise ValueError("Unknown Notion mastery label")
 
     attempt = AttemptCreate(reviewed_on=reviewed_on, mastery_level=mastery)
 
