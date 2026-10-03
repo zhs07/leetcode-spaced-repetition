@@ -18,7 +18,7 @@ I started tracking LeetCode practice in Notion, then built this app to make that
 review routine easier to maintain. I wanted to record how each attempt went,
 schedule the next review, and practice without seeing the name of the leetcode or topic because that can give you certain triggers for mental shortcuts to solutions that you will not have during an interview/OA setting.
 It grew into a full-stack project I use myself and can share with
-others preparing for interviews.
+others preparing for technical interviews and OAs.
 
 ## What it does
 
