@@ -81,26 +81,26 @@ export default function AuthGate() {
   if (!hosted) return <App />
   if (loading) return <main className="auth-shell"><p role="status">Restoring your session…</p></main>
   if (session && !recovering && showUpgrade && (isGuest || upgrading)) return <GuestUpgrade session={session} sessionError={sessionError} onBack={() => { setShowUpgrade(false); setShowAuth(false); dismissAuthError(); setError(''); setNotice('') }} />
-  const createAccountButton = <button className="secondary" disabled={busy} onClick={() => {
+  const createAccountButton = <button className="account-button account-button-featured" disabled={busy} onClick={() => {
     setShowGuestInfo(false); setError(''); setNotice(''); dismissAuthError()
     if (isGuest || upgrading) { setShowUpgrade(true); setShowAuth(false) }
     else { setMode('signup'); setShowAuth(true); setShowUpgrade(false) }
   }}>{upgrading ? 'Finish account setup' : 'Create account'}</button>
-  const signInButton = <button className="quiet-button" disabled={busy} onClick={() => { setMode('signin'); setShowAuth(true); setShowGuestInfo(false); setError(''); setNotice('') }}>Sign in</button>
+  const signInButton = <button className="account-button" disabled={busy} onClick={() => { setMode('signin'); setShowAuth(true); setShowGuestInfo(false); setError(''); setNotice('') }}>Sign in</button>
   const feedback = (error || sessionError) && <p role="alert" className="error mt-5">{error || sessionError}</p>
   if (session && !recovering && (!isGuest || !showAuth)) return <App key={session.user.id} accountFeedback={feedback} accountControls={isGuest ? <>
     <div className="guest-session">
-      <button className="guest-status" aria-expanded={showGuestInfo} aria-controls="guest-session-info" onClick={() => setShowGuestInfo(!showGuestInfo)}>Guest</button>
+      <button className="account-button guest-status" aria-expanded={showGuestInfo} aria-controls="guest-session-info" onClick={() => setShowGuestInfo(!showGuestInfo)}>Guest</button>
       {showGuestInfo && <p id="guest-session-info" className="guest-info">Your progress is saved for this browser. Clearing browser data or signing into another account loses access to it.</p>}
     </div>
     {createAccountButton}
     {signInButton}
   </> : <>
-    <span className="account-email">{session.user.email}</span>{upgrading ? createAccountButton : <button className="quiet-button" disabled={busy} onClick={() => void signOut()}>{busy ? 'Signing out…' : 'Sign out'}</button>}
+    <span className="account-email">{session.user.email}</span>{upgrading ? createAccountButton : <button className="account-button" disabled={busy} onClick={() => void signOut()}>{busy ? 'Signing out…' : 'Sign out'}</button>}
   </>} />
 
   if (!showAuth && !recovering && !sessionError) return <App key="sample" preview onStartGuest={() => { if (!busy) void startGuest() }} accountFeedback={feedback} accountControls={<>
-    <button className="secondary" disabled={busy} onClick={() => void startGuest()}>{busy ? 'Starting…' : 'Guest'}</button>
+    <button className="account-button" disabled={busy} onClick={() => void startGuest()}>{busy ? 'Starting…' : 'Guest'}</button>
     {createAccountButton}
     {signInButton}
   </>} />

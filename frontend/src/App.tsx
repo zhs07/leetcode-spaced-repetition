@@ -249,10 +249,7 @@ export default function App({ preview = false, onStartGuest, accountControls, ac
         </svg>
         {theme === 'dark' ? 'Light mode' : 'Dark mode'}
       </button>
-      <div className="topbar-right">
-        <span className="brand">LeetCode<span className="brand-divider">/</span><span className="text-muted">spaced repetition</span></span>
-        {accountControls && <div className="account-controls">{accountControls}</div>}
-      </div>
+      {accountControls && <div className="account-controls">{accountControls}</div>}
     </div>
     {accountFeedback}
     <header className="page-header">

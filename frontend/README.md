@@ -45,8 +45,10 @@ see `App` in preview mode with handwritten examples from `sampleProblems.ts`;
 this mode makes no tracker API requests. The Guest button creates a private empty
 workspace using the existing API. Sample action buttons also start a guest;
 filters and notes remain interactive in the sample view.
-The header exposes Create account directly beside a quieter Sign in action.
-For an active guest, Guest is a muted status badge that opens persistence details;
+The header exposes Guest, Create account, and Sign in with matching button sizes,
+borders, and spacing. Create account has a subtle neutral highlight; the decorative
+LeetCode / spaced repetition label has been removed.
+For an active guest, Guest opens persistence details;
 Create account opens the upgrade flow. From the sample preview, Create account
 opens ordinary email/password registration. Permanent accounts show their email
 and Sign out (or Finish account setup while an upgrade is unfinished).

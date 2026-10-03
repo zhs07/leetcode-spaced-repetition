@@ -84,20 +84,17 @@
 @layer components {
   .auth-shell { max-width: 500px; margin: 64px auto; padding: 0 20px; }
   .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
-  .topbar-right { display: flex; align-items: center; gap: 24px; min-width: 0; }
-  .account-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-  .account-controls .secondary, .account-controls .quiet-button { min-height: 36px; padding: 8px 12px; font-size: 12px; }
+  .account-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+  .account-button { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap; }
+  .account-button:hover, .guest-status[aria-expanded="true"] { background: var(--hover); border-color: var(--faint); color: var(--text); }
+  .account-button-featured { background: var(--soft); border-color: var(--faint); color: var(--text); }
   .account-email { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
   .guest-session { position: relative; }
-  .guest-status { padding: 4px 10px; min-height: 28px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; }
-  .guest-status:hover, .guest-status[aria-expanded="true"] { color: var(--text); background: var(--hover); }
   .guest-info { position: absolute; top: calc(100% + 10px); right: 0; z-index: 10; width: 250px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1.6; box-shadow: 0 8px 24px #0003; }
   .app-shell { max-width: 1440px; margin: 0 auto; padding: 0 36px 28px; }
   .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 76px; border-bottom: 1px solid var(--line); }
   .theme-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 12px; padding: 8px 10px; margin-left: -10px; border-radius: 7px; color: var(--muted); }
   .theme-toggle:hover { background: var(--hover); color: var(--text); }
-  .brand { font-size: 12px; font-weight: 500; }
-  .brand-divider { color: var(--faint); margin: 0 12px; }
   .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 48px 0 38px; }
   .page-header h1 { font-size: clamp(27px, 2.6vw, 36px); font-weight: 550; letter-spacing: -.045em; line-height: 1.2; }
   .header-description { margin-top: 12px; color: var(--muted); font-size: 14px; line-height: 1.6; }
@@ -183,14 +180,11 @@
   @media (max-width: 1100px) { .page-header { align-items: flex-start; flex-direction: column; gap: 24px; } }
   @media (max-width: 700px) {
     .app-shell { padding: 0 16px 24px; }
-    .topbar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; min-height: 64px; padding-block: 14px; }
-    .theme-toggle { white-space: nowrap; }
-    .topbar-right { display: contents; }
-    .account-controls { grid-column: 1 / -1; flex-wrap: wrap; position: relative; }
+    .topbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-height: 64px; padding-block: 14px; }
+    .theme-toggle { justify-self: start; white-space: nowrap; }
+    .account-controls { flex-wrap: wrap; position: relative; }
     .guest-session { position: static; }
     .guest-info { right: 0; width: min(280px, calc(100vw - 32px)); }
-    .brand { justify-self: end; font-size: 11px; }
-    .brand-divider { margin: 0 7px; }
     .page-header { padding: 32px 0 28px; }
     .page-header h1 { max-width: 280px; }
     .header-description { font-size: 13px; }

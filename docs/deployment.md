@@ -363,9 +363,11 @@ the guest identity. No Git staging, commit, or push was performed.
 
 ### Clear account creation entry point
 
-The header now exposes **Create account** beside a quieter **Sign in** action
-on both the sample preview and active guest workspace. Guest sessions use a
-muted **Guest** badge that opens only persistence details. Create account from a
+The header now exposes **Guest**, **Create account**, and **Sign in** with matching
+button heights, padding, borders, and corner radii on both the sample preview and
+active guest workspace. Create account has a subtle neutral highlight. The
+decorative **LeetCode / spaced repetition** label has been removed. Guest opens
+only persistence details in an active guest workspace. Create account from a
 guest opens **Create an account and keep your progress**; from the preview it
 opens ordinary registration. Permanent accounts show their email and Sign out,
 with Finish account setup available for an unfinished upgrade. The mobile guest
@@ -373,9 +375,9 @@ details are anchored to the account controls to stay within the viewport.
 The account operations and existing-account progress warning use the same flows.
 Build, lint, all 26 auth/guest browser tests, all 18 local tracker browser tests,
 and `git diff --check` passed. Desktop and mobile screenshots were inspected.
-The live signed-out header on port 5173 opened ordinary registration directly;
-returned to the preview without submitting an email or password. No live account
-or tracker data was written during this UI verification.
+The auth browser checks use mocked Supabase responses; the local tracker checks
+use a disposable database. No live account or tracker data was written during
+this UI verification.
 
 ## Preserved local version
 
