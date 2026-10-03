@@ -114,20 +114,19 @@ def test_empty_batch_returns_empty_result(database_path):
     assert get_all_reviews(database_path) == []
 
 
-def test_missing_latest_attempt_rolls_back_earlier_items(database_path):
-    missing_attempt = ImportedProblem(
-        problem=ProblemCreate(number=217, name="Missing review", difficulty="Easy", topic="Arrays"),
-        total_attempts=4,
-    )
-
-    with pytest.raises(ValueError):
-        save_imported_problems(database_path, [imported_item(1), missing_attempt])
+def test_positive_count_without_review_is_rejected_before_storage(database_path):
+    with pytest.raises(ValueError, match="Positive total_attempts requires"):
+        ImportedProblem(
+            problem=ProblemCreate(number=217, name="Missing review", difficulty="Easy", topic="Arrays"),
+            total_attempts=4,
+        )
 
     assert get_all_problems(database_path) == []
     assert get_all_reviews(database_path) == []
 
 
-def test_later_review_insert_failure_rolls_back_entire_batch(database_path):
+@pytest.mark.parametrize("unreviewed_first", [False, True])
+def test_later_review_insert_failure_rolls_back_entire_batch(database_path, unreviewed_first):
     # Force a real SQL failure after the earlier item's two inserts and the
     # later item's problem INSERT. No personal database is involved.
     original = Problem(206, "Keep existing", "Easy", "Linked List", "Keep notes")
@@ -145,7 +144,10 @@ def test_later_review_insert_failure_rolls_back_entire_batch(database_path):
         """)
 
     with pytest.raises(sqlite3.IntegrityError, match="forced import failure"):
-        save_imported_problems(database_path, [imported_item(1), imported_item(217)])
+        first = ImportedProblem(problem=ProblemCreate(
+            number=1, name="Unreviewed", difficulty="Easy", topic="Arrays",
+        ), total_attempts=0) if unreviewed_first else imported_item(1)
+        save_imported_problems(database_path, [first, imported_item(217)])
 
     assert get_all_problems(database_path) == [original]
     assert get_all_reviews(database_path) == [original_review]

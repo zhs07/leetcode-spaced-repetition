@@ -25,7 +25,7 @@ others preparing for interviews.
 - **Review scheduling:** record attempts and use self-assessed mastery to set the next review date.
 - **Blind practice:** randomly pick a due problem and read its statement before revealing its name, topic, difficulty, or notes.
 - **Problem management:** filter and sort your collection, save notes, and archive problems without losing their history.
-- **Notion import:** preview CSV rows from the supported Notion layout, preserve historical attempt totals, and avoid duplicate problems. See the [expected format](docs/development.md#importing-from-notion).
+- **CSV import:** preview problems from a standard template or the supported Notion layout, preserve supplied history, and avoid duplicate problems. See the [standard format](docs/development.md#importing-standard-csv) and [Notion format](docs/development.md#importing-from-notion).
 - **Private workspaces:** start as a guest, then create an account while keeping your progress. Guests can save up to 50 problems.
 - **Simple interface:** light and dark modes with clear mastery and due-date indicators.
 

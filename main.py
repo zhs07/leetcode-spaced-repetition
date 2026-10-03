@@ -1,4 +1,5 @@
 from pathlib import Path
+from collections.abc import Callable
 from random import choice
 
 from typing import Annotated
@@ -24,7 +25,7 @@ from schemas import (
     ReviewCreate, ProblemCreate, ProblemSummary, ImportPreviewRequest,
     PracticePick, StatementSaveRequest,
 )
-from importing import ImportPreview, ImportResult, preview_notion_csv
+from importing import ImportPreview, ImportResult, preview_notion_csv, preview_standard_csv
 from contextlib import asynccontextmanager
 from summaries import build_problem_summary
 from statements import fetch_statement, parse_statement, pasted_statement_html, statement_url, StatementUnavailable
@@ -109,9 +110,29 @@ def preview_notion_import(submission: ImportPreviewRequest, store: Store) -> Imp
 
 @router.post("/imports/notion", response_model=ImportResult)
 def import_notion_csv(submission: ImportPreviewRequest, store: Store) -> ImportResult:
+    return _save_csv_import(submission, store, preview_notion_csv)
+
+
+@router.post("/imports/standard/preview", response_model=ImportPreview)
+def preview_standard_import(submission: ImportPreviewRequest, store: Store) -> ImportPreview:
+    try:
+        return preview_standard_csv(submission.csv_text)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/imports/standard", response_model=ImportResult)
+def import_standard_csv(submission: ImportPreviewRequest, store: Store) -> ImportResult:
+    return _save_csv_import(submission, store, preview_standard_csv)
+
+
+def _save_csv_import(
+    submission: ImportPreviewRequest, store: Store,
+    preview_csv: Callable[[str], ImportPreview],
+) -> ImportResult:
     """Revalidate the original CSV and save its valid rows in one transaction."""
     try:
-        preview = preview_notion_csv(submission.csv_text)
+        preview = preview_csv(submission.csv_text)
         saved = store.save_imported_problems(preview.problems)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

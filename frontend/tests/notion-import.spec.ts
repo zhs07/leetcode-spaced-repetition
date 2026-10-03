@@ -11,10 +11,11 @@ function row(title = 'Imported practice #12002', attempts = '4') {
   return [title, 'Easy', 'Import topic', 'September 10, 2026', '🔵 Mastered', notes, attempts]
 }
 async function choose(page: Page, text: string) {
-  await page.getByLabel('Notion CSV file').setInputFiles({ name: 'practice_all.csv', mimeType: 'text/csv', buffer: Buffer.from(text) })
+  await page.getByLabel('CSV file', { exact: true }).setInputFiles({ name: 'practice_all.csv', mimeType: 'text/csv', buffer: Buffer.from(text) })
 }
 async function openPreview(page: Page, text: string) {
   await page.getByRole('button', { name: 'Import CSV', exact: true }).click()
+  await page.getByRole('combobox', { name: 'CSV format' }).selectOption('notion')
   await choose(page, text)
   await page.getByRole('button', { name: 'Preview import', exact: true }).click()
 }
@@ -119,7 +120,8 @@ test('import blocks conflicting actions while pending, recovers from failure and
   await dialog.getByRole('button', { name: 'Import 1 valid problem', exact: true }).click()
   await expect(dialog.getByRole('button', { name: 'Importing…' })).toBeDisabled()
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled()
-  await expect(page.getByLabel('Notion CSV file')).toBeDisabled()
+  await expect(page.getByLabel('CSV file', { exact: true })).toBeDisabled()
+  await expect(dialog.getByRole('combobox', { name: 'CSV format' })).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(dialog).toBeVisible()
   expect(attempts).toBe(1)

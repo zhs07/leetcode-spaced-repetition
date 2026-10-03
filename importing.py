@@ -1,11 +1,12 @@
-"""Notion CSV parsing and import response schemas."""
+"""Standard and Notion CSV adapters sharing preview and response schemas."""
 
 import csv
 import io
 import re
-from datetime import datetime
+from datetime import date, datetime
+from collections.abc import Callable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from schemas import AttemptCreate, ProblemCreate
 
@@ -14,7 +15,15 @@ class ImportedProblem(BaseModel):
     """Preview data; total_attempts includes the latest known attempt."""
 
     problem: ProblemCreate
-    total_attempts: int = Field(ge=1)
+    total_attempts: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_history(self) -> "ImportedProblem":
+        if self.problem.first_attempt is None and self.total_attempts != 0:
+            raise ValueError("Positive total_attempts requires reviewed_on and mastery_level")
+        if self.problem.first_attempt is not None and self.total_attempts < 1:
+            raise ValueError("A reviewed problem must have at least one attempt")
+        return self
 
 
 class ImportRowError(BaseModel):
@@ -56,6 +65,52 @@ NOTION_MASTERY_LABELS = {
     "🟢 Solved Independently": "Solved Independently",
     "🟡 Solved With Struggle": "Solved with Struggle",
 }
+
+STANDARD_REQUIRED_COLUMNS = ("number", "name", "difficulty", "topic")
+STANDARD_OPTIONAL_COLUMNS = ("notes", "reviewed_on", "mastery_level", "total_attempts")
+
+
+def parse_standard_row(row: dict[str, str]) -> ImportedProblem | None:
+    """Adapt explicit standard columns; never guess a review or problem number."""
+    columns = (*STANDARD_REQUIRED_COLUMNS, *STANDARD_OPTIONAL_COLUMNS)
+    if all(not row.get(column, "").strip() for column in columns):
+        return None
+
+    number_text = row["number"].strip()
+    if not re.fullmatch(r"[0-9]+", number_text) or int(number_text) <= 0:
+        raise ValueError("number must be a positive integer")
+    for column in ("name", "topic"):
+        if not row[column].strip():
+            raise ValueError(f"{column} must not be blank")
+
+    reviewed_text = row.get("reviewed_on", "").strip()
+    mastery = row.get("mastery_level", "").strip()
+    if bool(reviewed_text) != bool(mastery):
+        raise ValueError("Provide both reviewed_on and mastery_level, or leave both blank")
+
+    attempt = None
+    if reviewed_text:
+        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", reviewed_text):
+            raise ValueError("reviewed_on must use YYYY-MM-DD")
+        try:
+            reviewed_on = date.fromisoformat(reviewed_text)
+        except ValueError as error:
+            raise ValueError("reviewed_on must be a valid YYYY-MM-DD date") from error
+        attempt = AttemptCreate(reviewed_on=reviewed_on, mastery_level=mastery)
+
+    count_text = row.get("total_attempts", "").strip()
+    if count_text and not re.fullmatch(r"[0-9]+", count_text):
+        raise ValueError("total_attempts must be a nonnegative integer")
+    total_attempts = int(count_text) if count_text else int(attempt is not None)
+
+    return ImportedProblem(
+        problem=ProblemCreate(
+            number=int(number_text), name=row["name"].strip(),
+            difficulty=row["difficulty"].strip(), topic=row["topic"].strip(),
+            notes=row.get("notes", ""), first_attempt=attempt,
+        ),
+        total_attempts=total_attempts,
+    )
 
 
 def parse_problem_title(title: str) -> tuple[str, int]:
@@ -131,6 +186,17 @@ def parse_notion_row(row: dict[str, str]) -> ImportedProblem | None:
 
 
 def preview_notion_csv(csv_text: str) -> ImportPreview:
+    return _preview_csv(csv_text, NOTION_DATA_COLUMNS, parse_notion_row)
+
+
+def preview_standard_csv(csv_text: str) -> ImportPreview:
+    return _preview_csv(csv_text, STANDARD_REQUIRED_COLUMNS, parse_standard_row)
+
+
+def _preview_csv(
+    csv_text: str, required_columns: tuple[str, ...],
+    parse_row: Callable[[dict[str, str]], ImportedProblem | None],
+) -> ImportPreview:
     """Read CSV text and collect a preview without database writes.
 
     Row numbers count CSV records, including the header as row 1. A quoted
@@ -148,7 +214,7 @@ def preview_notion_csv(csv_text: str) -> ImportPreview:
     except csv.Error as error:
         raise ValueError(f"Malformed CSV: {error}") from error
 
-    missing_columns = set(NOTION_DATA_COLUMNS) - set(headers)
+    missing_columns = set(required_columns) - set(headers)
     if missing_columns:
         raise ValueError(f"Missing columns: {', '.join(sorted(missing_columns))}")
     if len(headers) != len(set(headers)):
@@ -177,14 +243,20 @@ def preview_notion_csv(csv_text: str) -> ImportPreview:
             continue
 
         try:
-            res = parse_notion_row(row)
+            res = parse_row(row)
             if res is None:
                 skipped_rows += 1
                 continue
         except ValueError as error:
+            message = str(error) or "Invalid row"
+            if isinstance(error, ValidationError):
+                message = "; ".join(
+                    f"{'.'.join(map(str, detail['loc']))}: {detail['msg']}".lstrip(": ")
+                    for detail in error.errors()
+                )
             errors.append(
                 ImportRowError(
-                    row_number=row_number, message=str(error) or "Invalid row"
+                    row_number=row_number, message=message
                 )
             )
             continue

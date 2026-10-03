@@ -135,6 +135,8 @@ ROUTES = [
     ("PUT", "/practice/1/statement", {"text": "Private"}),
     ("POST", "/imports/notion/preview", {"csv_text": "anything"}),
     ("POST", "/imports/notion", {"csv_text": "anything"}),
+    ("POST", "/imports/standard/preview", {"csv_text": "anything"}),
+    ("POST", "/imports/standard", {"csv_text": "anything"}),
     ("POST", "/problems", {"number": 1, "name": "Example", "difficulty": "Easy", "topic": "Arrays"}),
     ("POST", "/reviews", {"problem_number": 1, "reviewed_on": "2026-10-01", "mastery_level": "Mastered"}),
 ]
@@ -198,6 +200,34 @@ def capacity_csv(numbers):
         "Pattern/Trick": "Keep guest history", "Reviews": "3",
     } for number in numbers)
     return {"csv_text": stream.getvalue()}
+
+
+def test_standard_import_http_guest_cap_and_ownership(hosted_client, signing):
+    guest = {"Authorization": "Bearer " + signing(is_anonymous=True)}
+    other = {"Authorization": "Bearer " + signing(is_anonymous=False)}
+
+    def payload(numbers):
+        return {"csv_text": "number,name,difficulty,topic\n" + "\n".join(
+            f"{number},Unreviewed {number},Easy,Arrays" for number in numbers
+        )}
+
+    batch = payload(range(1, 52))
+    preview = hosted_client.post("/imports/standard/preview", json=batch, headers=guest)
+    assert preview.status_code == 200
+    assert len(preview.json()["problems"]) == 51
+    assert hosted_client.get("/problems", headers=guest).json() == []
+    assert hosted_client.post("/imports/standard", json=batch, headers=guest).status_code == 403
+    assert hosted_client.get("/problems", headers=guest).json() == []
+    accepted = hosted_client.post("/imports/standard", json=payload(range(1, 51)), headers=guest)
+    assert len(accepted.json()["imported_numbers"]) == 50
+    assert hosted_client.get("/reviews", headers=guest).json() == []
+    assert hosted_client.get("/problems", headers=other).json() == []
+    repeated = hosted_client.post("/imports/standard", json=batch, headers=guest)
+    assert repeated.status_code == 403
+    assert len(hosted_client.get("/problems", headers=guest).json()) == 50
+    assert hosted_client.post("/imports/standard", json=payload([1]), headers=guest).json()["skipped_existing_numbers"] == [1]
+    assert hosted_client.post("/imports/standard", json=batch, headers=other).status_code == 200
+    assert len(hosted_client.get("/problems", headers=other).json()) == 51
 
 
 def test_guest_http_limit_and_same_owner_upgrade_preserve_collection(hosted_client, signing):

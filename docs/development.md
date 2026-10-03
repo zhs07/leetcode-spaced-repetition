@@ -31,12 +31,47 @@ PUT `/practice/{number}/statement` with `{"text": "..."}`, and
 GET `/problems/{number}/summary` for an explicit reveal. Statement caches have
 a foreign key to the saved problem and are removed when it is deleted.
 
+## Importing standard CSV
+
+Click **Import CSV**, select **Standard CSV**, and download the template from
+the dialog (also available [in the repository](../frontend/public/standard-import-template.csv)).
+Replace its two example rows with your problems, select your CSV, and preview it
+before confirming. This is a documented format; custom column mapping and
+name/URL lookups are not supported.
+
+Headers are case-sensitive, may appear in any order, and must be unique.
+Unknown columns are ignored. The four required headers must be present;
+optional columns may be omitted entirely or left blank:
+
+| Column | Rules |
+| --- | --- |
+| `number` | Required positive LeetCode problem number; no placeholder or name lookup. |
+| `name` | Required nonblank problem name. |
+| `difficulty` | Required: `Easy`, `Medium`, or `Hard`. |
+| `topic` | Required nonblank topic. |
+| `notes` | Optional; defaults to an empty string. Commas and multiline notes must be CSV-quoted. |
+| `reviewed_on` | Optional valid `YYYY-MM-DD` date; requires `mastery_level`. |
+| `mastery_level` | Optional exact label from the [review intervals](../README.md#review-intervals); requires `reviewed_on`. |
+| `total_attempts` | Optional integer; defaults to 1 with a review, otherwise 0. Must be at least 1 with a review, and 0 without one. |
+
+Without history, problems import as unreviewed with zero attempts, no mastery,
+and no next review date. With history, the importer stores one latest review
+and `total_attempts - 1` older attempts, without inventing review records.
+Partial history and invalid values appear as row errors. Empty rows are skipped;
+the first valid occurrence of a number is used and later duplicates are reported.
+Existing problems, including archived ones, retain their notes and history.
+
+`POST /imports/standard/preview` and `POST /imports/standard` accept JSON
+`{"csv_text": "..."}`. Preview never writes; confirmation validates again and
+saves valid rows in one transaction. Storage failures roll back the batch, and
+hosted imports retain account isolation, input limits, and the guest problem cap.
+
 ## Importing from Notion
 
 This importer supports the original project's Notion layout, rather than
 arbitrary CSV files or every Notion database. The expected format is below.
 
-Click **Import CSV**, choose the exported CSV (prefer the fuller `_all.csv`
+Click **Import CSV**, select **Notion export**, choose the exported CSV (prefer the fuller `_all.csv`
 export), and click **Preview import**. Check the valid problems and reported
 row errors, then confirm. Nothing is saved during preview. Invalid and empty
 rows are excluded; existing problem numbers keep their data and history.

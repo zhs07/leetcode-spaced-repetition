@@ -378,19 +378,19 @@ test('guest capacity error keeps the add form, history, and session available', 
 
 test('guest import capacity error retains preview and saves no visible new rows', async ({ page }) => {
   await mockServices(page, { guestHistory: true })
-  await page.route('**/api/imports/notion/preview', route => route.fulfill({ json: {
+  await page.route('**/api/imports/standard/preview', route => route.fulfill({ json: {
     problems: [{ problem: { number: 51, name: 'Over cap import', difficulty: 'Easy', topic: 'Arrays', notes: '',
       first_attempt: { reviewed_on: '2026-10-02', mastery_level: 'Mastered' } }, total_attempts: 1 }],
     errors: [], skipped_rows: 0,
   } }))
-  await page.route('**/api/imports/notion', route => route.fulfill({ status: 403, json: {
+  await page.route('**/api/imports/standard', route => route.fulfill({ status: 403, json: {
     detail: 'Guest workspaces can save up to 50 problems. Create an account to keep your progress and add more, or delete a saved problem.',
   } }))
   await page.goto('/')
   await page.getByRole('button', { name: 'Guest', exact: true }).click()
   await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Import CSV', exact: true }).click()
-  await page.getByLabel('Notion CSV file').setInputFiles({ name: 'capacity_all.csv', mimeType: 'text/csv', buffer: Buffer.from('synthetic preview fixture') })
+  await page.getByLabel('CSV file').setInputFiles({ name: 'capacity_all.csv', mimeType: 'text/csv', buffer: Buffer.from('synthetic preview fixture') })
   await page.getByRole('button', { name: 'Preview import' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('button', { name: 'Import 1 valid problem', exact: true }).click()
@@ -424,13 +424,13 @@ for (const [label, contents] of [
     await page.getByRole('button', { name: 'Guest', exact: true }).click()
     await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Import CSV', exact: true }).click()
-    await page.getByLabel('Notion CSV file').setInputFiles({ name: 'too_large.csv', mimeType: 'text/csv', buffer: Buffer.from(contents) })
+    await page.getByLabel('CSV file').setInputFiles({ name: 'too_large.csv', mimeType: 'text/csv', buffer: Buffer.from(contents) })
     await page.getByRole('button', { name: 'Preview import' }).click()
     await expect(page.getByRole('alert')).toContainText('1 MiB maximum')
     await expect(page.getByRole('button', { name: 'Preview import' })).toBeEnabled()
-    await expect(page.getByLabel('Notion CSV file')).toBeEnabled()
-    expect(calls.some(call => call.path.includes('/imports/notion'))).toBeFalsy()
-    await page.getByLabel('Notion CSV file').setInputFiles({ name: 'smaller.csv', mimeType: 'text/csv', buffer: Buffer.from('smaller fixture') })
+    await expect(page.getByLabel('CSV file')).toBeEnabled()
+    expect(calls.some(call => call.path.includes('/imports/standard'))).toBeFalsy()
+    await page.getByLabel('CSV file').setInputFiles({ name: 'smaller.csv', mimeType: 'text/csv', buffer: Buffer.from('smaller fixture') })
     await expect(page.getByRole('alert')).toHaveCount(0)
     await page.getByRole('button', { name: 'Close import' }).click()
     await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
@@ -442,7 +442,7 @@ for (const [label, contents] of [
 test('plain-text server 413 shows an upload-size message and supports a smaller retry', async ({ page }) => {
   await mockServices(page, { guestHistory: true })
   let previews = 0
-  await page.route('**/api/imports/notion/preview', route => {
+  await page.route('**/api/imports/standard/preview', route => {
     if (++previews === 1) return route.fulfill({ status: 413, contentType: 'text/plain', body: 'Content Too Large' })
     return route.fulfill({ json: { problems: [{ problem: { number: 51, name: 'Smaller import', difficulty: 'Easy', topic: 'Arrays', notes: '',
       first_attempt: { reviewed_on: '2026-10-03', mastery_level: 'Mastered' } }, total_attempts: 1 }], errors: [], skipped_rows: 0 } })
@@ -451,11 +451,11 @@ test('plain-text server 413 shows an upload-size message and supports a smaller 
   await page.getByRole('button', { name: 'Guest', exact: true }).click()
   await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Import CSV', exact: true }).click()
-  await page.getByLabel('Notion CSV file').setInputFiles({ name: 'server_rejected.csv', mimeType: 'text/csv', buffer: Buffer.from('synthetic fixture') })
+  await page.getByLabel('CSV file').setInputFiles({ name: 'server_rejected.csv', mimeType: 'text/csv', buffer: Buffer.from('synthetic fixture') })
   await page.getByRole('button', { name: 'Preview import' }).click()
   await expect(page.getByRole('alert')).toContainText('Split large CSV files into smaller imports')
   await expect(page.getByRole('alert')).not.toContainText('Request failed')
-  await page.getByLabel('Notion CSV file').setInputFiles({ name: 'smaller.csv', mimeType: 'text/csv', buffer: Buffer.from('smaller fixture') })
+  await page.getByLabel('CSV file').setInputFiles({ name: 'smaller.csv', mimeType: 'text/csv', buffer: Buffer.from('smaller fixture') })
   await page.getByRole('button', { name: 'Preview import' }).click()
   await expect(page.getByRole('button', { name: 'Import 1 valid problem', exact: true })).toBeEnabled()
   await expect(page.getByRole('alert')).toHaveCount(0)

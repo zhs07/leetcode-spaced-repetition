@@ -15,7 +15,7 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 import pytest
 
-from importing import ImportedProblem
+from importing import ImportedProblem, preview_standard_csv
 from guest_limits import ProblemLimitExceeded
 from migrate import MIGRATIONS, SchemaMismatch, check_schema, migrate
 from models import Problem, Review
@@ -134,6 +134,33 @@ def test_import_is_repeat_safe_owner_scoped_and_keeps_counts(stores):
     assert bob.get_all_reviews() == [review()]
 
 
+def test_standard_mixed_history_import_is_owner_scoped_repeat_safe_and_capped(stores):
+    alice, bob = stores
+    bob.save_problem_with_first_attempt(problem(), review())
+    batch = preview_standard_csv(
+        "number,name,difficulty,topic,reviewed_on,mastery_level,total_attempts\n"
+        "1,Unreviewed,Easy,Arrays,,,\n"
+        "2,Reviewed,Medium,Graphs,2026-10-03,Mastered,4\n"
+    ).problems
+    guest = PostgresStore(alice.pool, alice.user_id, problem_limit=1)
+    with pytest.raises(ProblemLimitExceeded):
+        guest.save_imported_problems(batch)
+    assert alice.get_all_problems() == alice.get_all_reviews() == []
+    guest = PostgresStore(alice.pool, alice.user_id, problem_limit=2)
+    assert guest.save_imported_problems(batch).imported_numbers == [1, 2]
+    assert guest.save_imported_problems(batch).skipped_existing_numbers == [1, 2]
+    problems = alice.get_all_problems()
+    reviews = alice.get_all_reviews()
+    assert [p.historical_attempts for p in problems] == [0, 3]
+    assert len(reviews) == 1
+    summaries = [build_problem_summary(p, reviews) for p in problems]
+    assert (summaries[0].attempts, summaries[0].mastery_level, summaries[0].next_review) == (0, None, None)
+    assert summaries[1].attempts == 4
+    assert summaries[1].next_review == date(2026, 11, 2)
+    assert bob.get_all_problems() == [problem()]
+    assert bob.get_all_reviews() == [review()]
+
+
 def fail_review_for(database, number):
     with psycopg.connect(database) as connection:
         connection.execute(sql.SQL("""
@@ -142,11 +169,15 @@ def fail_review_for(database, number):
         """).format(sql.Literal(number)))
 
 
-def test_failed_import_rolls_back_whole_batch(stores, database):
+@pytest.mark.parametrize("unreviewed_first", [False, True])
+def test_failed_import_rolls_back_whole_batch(stores, database, unreviewed_first):
     alice, _ = stores
     fail_review_for(database, 2)
     with pytest.raises(StorageError):
-        alice.save_imported_problems([imported(1), imported(2)])
+        first = ImportedProblem(problem=ProblemCreate(
+            number=1, name="Unreviewed", difficulty="Easy", topic="Arrays",
+        ), total_attempts=0) if unreviewed_first else imported(1)
+        alice.save_imported_problems([first, imported(2)])
     assert alice.get_all_problems() == alice.get_all_reviews() == []
 
 

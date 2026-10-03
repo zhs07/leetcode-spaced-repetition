@@ -1,6 +1,6 @@
 import useModalDialog from './useModalDialog'
 import { useEffect, useRef, useState } from 'react'
-import { maxRequestBytes, request, requestSizeError } from './api'
+import { masteryLevels, maxRequestBytes, request, requestSizeError } from './api'
 import { hosted } from './auth'
 import type { ImportPreview, ImportResult } from './api'
 
@@ -9,6 +9,7 @@ export default function ImportDialog({ onClose, onImported }: {
   onImported: (result: ImportResult) => void;
 }) {
   const dialog = useModalDialog()
+  const [format, setFormat] = useState<'standard' | 'notion'>('standard')
   const [file, setFile] = useState<File | null>(null)
   const [csvText, setCsvText] = useState('')
   const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -30,8 +31,8 @@ export default function ImportDialog({ onClose, onImported }: {
     try {
       if (hosted && file.size > maxRequestBytes) throw new Error(requestSizeError)
       const text = await file.text()
-      if (!text.trim()) throw new Error('This file is empty. Choose a Notion CSV export.')
-      const data = await request<ImportPreview>('/imports/notion/preview', { csv_text: text })
+      if (!text.trim()) throw new Error('This file is empty. Choose a CSV file.')
+      const data = await request<ImportPreview>(`/imports/${format}/preview`, { csv_text: text })
       if (active.current) { setPreview(data); setCsvText(text) }
     } catch (failure) {
       if (active.current) setError(failure instanceof Error ? failure.message : 'Could not preview this file.')
@@ -47,7 +48,7 @@ export default function ImportDialog({ onClose, onImported }: {
     setBusy('save'); setError('')
     try {
       // Send the exact CSV that was previewed. The server validates it again.
-      const result = await request<ImportResult>('/imports/notion', { csv_text: csvText })
+      const result = await request<ImportResult>(`/imports/${format}`, { csv_text: csvText })
       if (active.current) onImported(result)
     } catch (failure) {
       if (active.current) setError(failure instanceof Error ? failure.message : 'Could not import. Please try again.')
@@ -65,20 +66,38 @@ export default function ImportDialog({ onClose, onImported }: {
     <div className="flex items-start justify-between gap-4">
       <div>
         <p className="eyebrow">Bring your practice history</p>
-        <h2 id="import-title" className="text-2xl font-semibold mt-2">Import from Notion</h2>
+        <h2 id="import-title" className="text-2xl font-semibold mt-2">Import CSV</h2>
         <p className="mt-2 text-sm leading-6 text-muted">Choose your exported CSV, check the preview, then confirm the import.</p>
       </div>
       <button className="icon-button" aria-label="Close import" disabled={busy !== null} onClick={onClose}>×</button>
     </div>
 
     <div className="mt-5 space-y-3">
-      <label>Notion CSV file
-        <input type="file" accept=".csv,text/csv" disabled={busy !== null} autoFocus onChange={event => {
+      <label>CSV format
+        <select value={format} disabled={busy !== null} autoFocus onChange={event => {
+          setFormat(event.target.value as 'standard' | 'notion')
+          setPreview(null); setCsvText(''); setError('')
+        }}>
+          <option value="standard">Standard CSV</option>
+          <option value="notion">Notion export</option>
+        </select>
+      </label>
+      {format === 'standard' ? <div className="text-xs leading-5 text-muted space-y-2">
+        <p>Required columns: number, name, difficulty, topic. Optional: notes, reviewed_on, mastery_level, total_attempts.</p>
+        <p>Leave review history blank for unreviewed problems (0 attempts). With both a review date (YYYY-MM-DD) and mastery, attempts default to 1.</p>
+        <a className="text-button" href={`${import.meta.env.BASE_URL}standard-import-template.csv`} download>Download CSV template</a>
+        <p>Replace the template’s example rows with your own problems.</p>
+        <details><summary className="text-button cursor-pointer">Supported values</summary>
+          <p className="mt-2">Difficulty: Easy, Medium, Hard. Mastery: {masteryLevels.join(', ')}.</p>
+        </details>
+      </div> : <p className="text-xs leading-5 text-muted">Use the original Notion layout: Problem, Difficulty, Topic, Last Reviewed, Mastery, Pattern/Trick, Reviews. Choose the fuller export ending in _all.csv when available.</p>}
+      <label>CSV file
+        <input type="file" accept=".csv,text/csv" disabled={busy !== null} onChange={event => {
           setFile(event.target.files?.[0] ?? null)
           setPreview(null); setCsvText(''); setError('')
         }} />
       </label>
-      <p className="text-xs leading-5 text-muted">Use the fuller export ending in _all.csv when available. Existing problem numbers will be skipped, keeping their notes and history.</p>
+      <p className="text-xs leading-5 text-muted">Existing problem numbers will be skipped, keeping their notes and history.</p>
       {!preview && <button className="secondary" disabled={!file || busy !== null} onClick={() => void loadPreview()}>{busy === 'preview' ? 'Reading CSV…' : 'Preview import'}</button>}
     </div>
 
@@ -87,7 +106,7 @@ export default function ImportDialog({ onClose, onImported }: {
         <strong className="text-strong">{preview.problems.length} valid {preview.problems.length === 1 ? 'problem' : 'problems'}</strong>
         <span>{preview.errors.length} invalid {preview.errors.length === 1 ? 'row' : 'rows'} · {preview.skipped_rows} empty {preview.skipped_rows === 1 ? 'row' : 'rows'} skipped</span>
       </div>
-      <p className="text-sm leading-6 text-muted">Nothing has been saved yet. Import preserves total attempts and the latest review; next review dates follow the app’s schedule.</p>
+      <p className="text-sm leading-6 text-muted">Nothing has been saved yet. Import preserves supplied attempts and the latest review; next review dates follow the app’s schedule. Problems without review history stay unreviewed.</p>
 
       {preview.errors.length > 0 && <div className="import-errors">
         <h3 className="font-semibold">Rows that won’t be imported</h3>
@@ -109,8 +128,8 @@ export default function ImportDialog({ onClose, onImported }: {
                 <p className="mt-2 whitespace-pre-wrap break-words text-muted">{item.problem.notes}</p>
               </details>}
             </th>
-            <td className="whitespace-nowrap">{item.problem.first_attempt?.reviewed_on}</td>
-            <td>{item.problem.first_attempt?.mastery_level}</td>
+            <td className="whitespace-nowrap">{item.problem.first_attempt?.reviewed_on ?? 'Not reviewed'}</td>
+            <td>{item.problem.first_attempt?.mastery_level ?? '—'}</td>
             <td className="font-mono">{item.total_attempts}</td>
           </tr>)}</tbody>
         </table>

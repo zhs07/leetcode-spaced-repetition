@@ -165,13 +165,12 @@ class PostgresStore:
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (user_id, number) DO NOTHING RETURNING number
                 """, (self.user_id, source.number, source.name, source.difficulty,
-                      source.topic, source.notes, imported.total_attempts - 1)).fetchone()
+                      source.topic, source.notes, imported.total_attempts - int(attempt is not None))).fetchone()
                 if row is not None:
-                    if attempt is None:
-                        raise ValueError(f"Problem #{source.number} has no latest attempt")
-                    self._insert_review(connection, Review(
-                        source.number, attempt.reviewed_on, attempt.mastery_level,
-                    ))
+                    if attempt is not None:
+                        self._insert_review(connection, Review(
+                            source.number, attempt.reviewed_on, attempt.mastery_level,
+                        ))
                     inserted.add(source.number)
 
         imported_numbers, skipped_numbers = [], []

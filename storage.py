@@ -311,8 +311,8 @@ def save_imported_problems(
 
     Store one latest review and total_attempts - 1 historical attempts for
     each new problem. Skip existing numbers, including repeats in this batch.
-    A new imported problem must have a first_attempt; otherwise raise
-    ValueError. Any failure rolls back every write from this batch.
+    Unreviewed problems have zero attempts and no review INSERT.
+    Any failure rolls back every write from this batch.
     """
     connection = get_connection(database_path)
     imported_numbers: list[int] = []
@@ -335,8 +335,6 @@ def save_imported_problems(
                 continue
 
             latest_attempt = source.first_attempt
-            if latest_attempt is None:
-                raise ValueError(f"Problem #{source.number} has no latest attempt")
 
             connection.execute(
                 """
@@ -344,15 +342,16 @@ def save_imported_problems(
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (source.number, source.name, source.difficulty, source.topic,
-                 source.notes, imported.total_attempts - 1),
+                 source.notes, imported.total_attempts - int(latest_attempt is not None)),
             )
-            connection.execute(
-                """
-                INSERT INTO reviews (problem_number, reviewed_on, mastery_level)
-                VALUES (?, ?, ?)
-                """,
-                (source.number, latest_attempt.reviewed_on.isoformat(), latest_attempt.mastery_level),
-            )
+            if latest_attempt is not None:
+                connection.execute(
+                    """
+                    INSERT INTO reviews (problem_number, reviewed_on, mastery_level)
+                    VALUES (?, ?, ?)
+                    """,
+                    (source.number, latest_attempt.reviewed_on.isoformat(), latest_attempt.mastery_level),
+                )
             imported_numbers.append(source.number)
 
         connection.commit()
