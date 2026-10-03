@@ -16,14 +16,14 @@ open the link in the browser that requested it.
 
 I started tracking LeetCode practice in Notion, then built this app to make that
 review routine easier to maintain. I wanted to record how each attempt went,
-schedule the next review, and practice without seeing the topic or solution notes
-in advance. It grew into a full-stack project I use myself and can share with
+schedule the next review, and practice without seeing the name of the leetcode or topic because that can give you certain triggers for mental shortcuts to solutions that you will not have during an interview/OA setting.
+It grew into a full-stack project I use myself and can share with
 others preparing for interviews.
 
 ## What it does
 
-- **Review scheduling:** record attempts and use self-assessed mastery to set the next review date.
-- **Blind practice:** randomly pick a due problem and read its statement before revealing its name, topic, difficulty, or notes.
+- **Review scheduling:** record attempts and use self-assessed mastery to automatically set the next review date.
+- **Blind practice:** randomly pick a due or overdue problem and read its problem statement with examples and constraints before revealing its name, topic, difficulty, notes or anything that could give you a trigger for mental shortcut.
 - **Problem management:** filter and sort your collection, save notes, and archive problems without losing their history.
 - **CSV import:** preview problems from a standard template or the supported Notion layout, preserve supplied history, and avoid duplicate problems. See the [standard format](docs/development.md#importing-standard-csv) and [Notion format](docs/development.md#importing-from-notion).
 - **Private workspaces:** start as a guest, then create an account while keeping your progress. Guests can save up to 50 problems.
