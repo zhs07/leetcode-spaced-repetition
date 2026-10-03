@@ -1,42 +1,47 @@
 # LeetCode Review Tracker
 
-A focused spaced-repetition app for technical interview practice.
+A spaced-repetition app for technical interview practice. Track attempts, keep
+notes, and know which problems to revisit next.
+
+**[Open the live app →](https://leetcode-tracker-web.onrender.com/)**
+
+Explore the sample tracker without signing in, or choose **Guest** to start your
+own workspace. Create an account to keep access across browsers and devices.
+
+The API runs on free hosting and may take about a minute to wake after inactivity.
+If a confirmation or password-reset email is missing, check your Spam folder and
+open the link in the browser that requested it.
 
 ## Why I built it
 
-I started tracking LeetCode practice in Notion. That gave me a review routine,
-but I wanted more control over how I recorded attempts, scheduled reviews,
-and chose what to practice next.
-
-I built this app around that workflow while learning full-stack development.
-It keeps a history of my attempts, schedules the next review from how an attempt
-actually went, and lets me pause problems without losing their history.
-Blind practice hides the problem's name, topic, difficulty, and notes so I can
-try it without those advance clues.
-
-The goal is a clear, minimal tool I want to use myself, and can eventually share
-with other people preparing for interviews.
+I started tracking LeetCode practice in Notion, then built this app to make that
+review routine easier to maintain. I wanted to record how each attempt went,
+schedule the next review, and practice without seeing the topic or solution notes
+in advance. It grew into a full-stack project I use myself and can share with
+others preparing for interviews.
 
 ## What it does
 
-- **Schedule reviews:** record an attempt and choose a mastery level to set the next review date.
-- **Practice blind:** randomly pick an active due problem, read its statement, and reveal details when ready.
-- **Keep useful history:** save notes, filter and sort problems, and archive or restore problems as needed.
-- **Bring your Notion data:** preview a CSV import, see row errors, and preserve historical attempt totals without adding duplicates.
-- **Stay focused:** a minimal interface with light and dark modes and clear mastery and due-date indicators.
+- **Review scheduling:** record attempts and use self-assessed mastery to set the next review date.
+- **Blind practice:** randomly pick a due problem and read its statement before revealing its name, topic, difficulty, or notes.
+- **Problem management:** filter and sort your collection, save notes, and archive problems without losing their history.
+- **Notion import:** preview CSV rows and errors, preserve historical attempt totals, and avoid duplicate problems.
+- **Private workspaces:** start as a guest, then create an account while keeping your progress. Guests can save up to 50 problems.
+- **Simple interface:** light and dark modes with clear mastery and due-date indicators.
 
 ## Built with
 
-- **Backend:** Python, FastAPI, SQLite
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS
-- **Testing:** pytest and Playwright, using isolated test databases
+- **Backend:** Python, FastAPI
+- **Data and authentication:** PostgreSQL and Supabase Auth for the hosted app; SQLite for local use
+- **Hosting:** Render static frontend and API
+- **Testing:** pytest and Playwright with isolated test databases
 
-## Run it locally or explore the code
-
-The app currently runs locally. Public deployment is the next milestone.
+## Explore the code
 
 - [Development guide](docs/development.md): local setup, tests, import behavior, and statement retrieval.
 - [Frontend guide](frontend/README.md): UI architecture, API flow, and browser tests.
+- [Deployment notes](docs/deployment.md): hosted configuration, verification, and current limitations.
 
 Review scheduling uses fixed intervals based on self-assessed mastery. This is
 an independent personal project, not an official LeetCode product.
