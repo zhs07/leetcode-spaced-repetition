@@ -45,6 +45,11 @@ see `App` in preview mode with handwritten examples from `sampleProblems.ts`;
 this mode makes no tracker API requests. The Guest button creates a private empty
 workspace using the existing API. Sample action buttons also start a guest;
 filters and notes remain interactive in the sample view.
+The header exposes Create account directly beside a quieter Sign in action.
+For an active guest, Guest is a muted status badge that opens persistence details;
+Create account opens the upgrade flow. From the sample preview, Create account
+opens ordinary email/password registration. Permanent accounts show their email
+and Sign out (or Finish account setup while an upgrade is unfinished).
 
 Guest sessions return in the same browser until its session/storage is lost.
 Signing into an existing permanent account replaces the guest session without
@@ -54,7 +59,7 @@ then set a password in `GuestUpgrade.tsx`. A UUID-only browser marker resumes
 unfinished setup after reload; ownership and API verification remain unchanged.
 Existing-email conflicts do not merge or switch accounts. Guest sign-in is enabled and
 real guest save/reload has been verified. Evidence, temporary verification server
-commands, pending live upgrade/provider configuration, and remaining public-launch
+commands, live upgrade evidence, and remaining public-launch
 abuse controls are in the deployment guide.
 Account changes remount the tracker and clear
 its state; API requests attach the current access token and reject stale responses.

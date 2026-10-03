@@ -200,7 +200,7 @@ The hosted landing flow now works as follows:
 4. **Sign in** opens the existing account form. Guests can go back without
    replacing their session. The form explains that successful account sign-in
    replaces guest access and does not transfer guest records. **Create account**,
-   available in the Guest details and sign-in form, instead starts the same-user
+   available directly in the header and sign-in form, instead starts the same-user
    email upgrade described below. Existing-account merging is not implemented.
 
 Clearing browser data, losing the session, or signing into another account can
@@ -298,7 +298,9 @@ abuse controls and cleanup to keep resource use within the free allowance."
 
 ### Retaining guest progress when creating a new account
 
-Implemented locally October 2; **real email upgrade verification is pending**.
+Implemented locally October 2. The user subsequently reported a successful real
+guest-to-new-email-account test with consistent saved data. An independent UUID
+and database-content comparison has not yet been performed.
 The current official [anonymous-account upgrade guide](https://supabase.com/docs/guides/auth/auth-anonymous#convert-an-anonymous-user-to-a-permanent-user)
 requires manual identity linking to be enabled, email verification first, then
 password creation. The implementation follows that order:
@@ -339,7 +341,7 @@ The Site URL remains `http://127.0.0.1:5173/`. No OAuth provider or paid feature
 was enabled. Visual proofs are saved outside the repository at
 `/private/tmp/leetcode-manual-linking-enabled-2026-10-02.jpg` and
 `/private/tmp/leetcode-guest-redirect-enabled-2026-10-02.jpg`.
-These provider prerequisites are ready; real email conversion remains pending.
+These provider prerequisites are ready; the user-reported live test succeeded.
 The user must supply an unused email that can receive provider mail and enter
 their own password. Default Supabase email delivery is restricted; the existing
 [SMTP requirements](#provider-configuration-still-required) still apply. Do not
@@ -358,6 +360,22 @@ The temporary servers were restarted on the same ports (5176/8002) and the
 retained real guest reloaded with the same Two Sum attempt and scheduled date.
 The new account form was inspected without submitting an email or changing
 the guest identity. No Git staging, commit, or push was performed.
+
+### Clear account creation entry point
+
+The header now exposes **Create account** beside a quieter **Sign in** action
+on both the sample preview and active guest workspace. Guest sessions use a
+muted **Guest** badge that opens only persistence details. Create account from a
+guest opens **Create an account and keep your progress**; from the preview it
+opens ordinary registration. Permanent accounts show their email and Sign out,
+with Finish account setup available for an unfinished upgrade. The mobile guest
+details are anchored to the account controls to stay within the viewport.
+The account operations and existing-account progress warning use the same flows.
+Build, lint, all 26 auth/guest browser tests, all 18 local tracker browser tests,
+and `git diff --check` passed. Desktop and mobile screenshots were inspected.
+The live signed-out header on port 5173 opened ordinary registration directly;
+returned to the preview without submitting an email or password. No live account
+or tracker data was written during this UI verification.
 
 ## Preserved local version
 

@@ -62,7 +62,7 @@ export default function GuestUpgrade({ session, sessionError, onBack }: {
 
   return <main className="auth-shell"><section className="auth-card" aria-labelledby="upgrade-title">
     <p className="eyebrow">LeetCode review tracker</p>
-    <h1 id="upgrade-title" className="text-2xl font-semibold mt-3">{verified ? 'Choose your password' : 'Keep your guest progress'}</h1>
+    <h1 id="upgrade-title" className="text-2xl font-semibold mt-3">{verified ? 'Choose your password' : 'Create an account and keep your progress'}</h1>
     <p className="text-muted mt-3 mb-6">{verified ? 'Your email is confirmed. Set a password to sign in again from any device. Your problems and review history stay with this account.' : 'Create a new account using an email you have not used here before. Confirm your email first, then choose a password. Your problems, notes, and review history stay with you.'}</p>
     <form key={verified ? 'password' : 'email'} onSubmit={submit}><fieldset disabled={busy} className="space-y-4">
       {verified ? <>
