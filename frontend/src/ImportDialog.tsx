@@ -1,6 +1,7 @@
 import useModalDialog from './useModalDialog'
 import { useEffect, useRef, useState } from 'react'
-import { request } from './api'
+import { maxRequestBytes, request, requestSizeError } from './api'
+import { hosted } from './auth'
 import type { ImportPreview, ImportResult } from './api'
 
 export default function ImportDialog({ onClose, onImported }: {
@@ -27,6 +28,7 @@ export default function ImportDialog({ onClose, onImported }: {
     pending.current = true
     setBusy('preview'); setError(''); setPreview(null); setCsvText('')
     try {
+      if (hosted && file.size > maxRequestBytes) throw new Error(requestSizeError)
       const text = await file.text()
       if (!text.trim()) throw new Error('This file is empty. Choose a Notion CSV export.')
       const data = await request<ImportPreview>('/imports/notion/preview', { csv_text: text })

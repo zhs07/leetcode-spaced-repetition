@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.middleware.body_limit import RequestBodyLimitMiddleware
 from auth import TokenVerifier
 from settings import Settings
 from postgres_storage import PostgresStore, open_pool
 from sqlite_store import SQLiteStore
 from storage_errors import DuplicateProblem, ProblemNotFound, StorageError
 from guest_limits import DEFAULT_GUEST_PROBLEM_LIMIT, ProblemLimitExceeded
+from input_limits import MAX_REQUEST_BYTES
 
 from models import Problem, Review
 from storage import initialize_database
@@ -262,6 +264,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(lifespan=lifespan)
     application.state.settings = settings
+    if settings.mode == "hosted":
+        application.add_middleware(RequestBodyLimitMiddleware, max_body_size=MAX_REQUEST_BYTES)
+    # Added last so CORS also wraps body-limit responses from the middleware.
     application.add_middleware(
         CORSMiddleware, allow_origins=list(settings.allowed_origins),
         allow_methods=["GET", "POST", "PUT", "DELETE"],

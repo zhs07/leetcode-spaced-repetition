@@ -434,6 +434,63 @@ review history, payload sizes, request volume, or the number of guests. CAPTCHA,
 operation limits, cleanup, and remaining live launch checks still need work.
 No provider settings, applied migrations, live records, or hosting were changed.
 
+## Input-size limits milestone (implemented locally)
+
+Implemented October 3 to bound individual submissions in addition to the saved
+problem cap. These limits apply to new input from guests and permanent accounts;
+permanent accounts still have no saved-problem-count cap. Existing records are
+not truncated, rewritten, or removed, and larger old records remain readable.
+
+| Input | Limit | Where enforced |
+| --- | --- | --- |
+| Hosted HTTP request body | 1 MiB (1,048,576 bytes), including JSON encoding overhead | Starlette middleware and hosted frontend precheck |
+| Problem name | 200 characters | `ProblemCreate` validation, including CSV rows |
+| Topic | 200 characters | Same validation |
+| Notes | 10,000 characters | Same validation |
+| CSV text | 1,000,000 characters; hosted requests also obey the byte limit | Preview and confirmed-import request validation |
+| Pasted statement | Existing 100,000-character limit | Existing statement validation |
+
+`input_limits.py` holds the new backend constants. Hosted `main.py` configures
+the installed Starlette `RequestBodyLimitMiddleware` before CORS, so CORS wraps
+its HTTP 413 responses. The middleware counts incoming bytes, including streamed
+requests with missing or understated Content-Length headers. See
+[Starlette's body limiter](https://starlette.dev/middleware/#requestbodylimitmiddleware).
+No middleware package or other dependency was installed. Local SQLite mode does
+not add the HTTP byte limiter; new-input field validation applies on `main` in
+both modes. The preserved `local-version` branch has not been changed.
+
+The hosted frontend rejects CSV files larger than the byte cap before reading
+them, then checks the encoded JSON request too: quotes/newlines and UTF-8 can
+increase its size. These browser checks give quick feedback; the API enforces
+the actual limit independently. HTTP 413, including a plain-text middleware
+response, shows a size/split-import suggestion without clearing the session,
+form, or selected file. Choosing a smaller file allows a fresh preview.
+
+Field violations return HTTP 422 for direct submissions. CSV rows use the same
+`ProblemCreate` validation, so oversized fields are reported as invalid rows;
+the existing behavior of importing only the explicitly previewed valid rows is
+preserved. A whole CSV/request exceeding its overall limit is rejected before
+parsing/saving. Reads and responses are not capped by this request-body limit.
+
+Verification: **170 backend tests**, **31 mocked auth browser tests**, **18 local
+tracker browser tests** using disposable SQLite, frontend build/lint, and
+`git diff --check` passed. Coverage includes exact byte/character boundaries,
+Unicode without truncation, streamed bypass attempts, CORS on 413, no problem
+or first-attempt writes after validation failure, CSV field-limit enforcement,
+older large records, encoded JSON growth, session retention, and smaller-file
+retry. No live tracker records, applied migrations, or provider settings were
+changed. Restarted the hosted API on port 8001 with the updated code and verified
+`/health` returned OK; the frontend on port 5173 still returned HTTP 200. A live
+unauthenticated oversized POST to the CSV preview endpoint returned HTTP 413
+with the configured frontend CORS origin. This rejection occurred before any
+storage operation and created no records.
+
+Remaining guest-abuse work: CAPTCHA for account creation, request/operation
+rate limits, review-history bounds, and cleanup of both anonymous identities
+and their application data. Payload bounds do not prevent repeated small
+requests or the creation of many guest identities. Public hosting and the other
+live launch checks remain pending.
+
 ## Preserved local version
 
 `local-version` preserves the working SQLite app without authentication at

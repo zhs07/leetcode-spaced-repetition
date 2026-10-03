@@ -5,6 +5,7 @@ from datetime import date
 from pydantic import BaseModel, Field, field_validator
 
 from scheduler import REVIEW_INTERVALS
+from input_limits import MAX_CSV_CHARACTERS, MAX_NAME_CHARACTERS, MAX_NOTES_CHARACTERS, MAX_TOPIC_CHARACTERS
 
 from typing import Literal
 
@@ -24,15 +25,15 @@ class ReviewCreate(AttemptCreate):
 
 
 class ImportPreviewRequest(BaseModel):
-    csv_text: str = Field(min_length=1)
+    csv_text: str = Field(min_length=1, max_length=MAX_CSV_CHARACTERS)
 
 
 class ProblemCreate(BaseModel):
     number : int = Field(gt=0)
-    name : str = Field(min_length=1)
+    name : str = Field(min_length=1, max_length=MAX_NAME_CHARACTERS)
     difficulty : Literal["Easy", "Medium", "Hard"]
-    topic : str = Field(min_length=1)
-    notes : str = ""
+    topic : str = Field(min_length=1, max_length=MAX_TOPIC_CHARACTERS)
+    notes : str = Field(default="", max_length=MAX_NOTES_CHARACTERS)
     first_attempt: AttemptCreate | None = None
     
     @field_validator("name", "topic")
