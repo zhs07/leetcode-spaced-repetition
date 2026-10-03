@@ -14,9 +14,20 @@ function session(id = alice, expired = false) {
   }
 }
 
-async function mockServices(page: Page, options: { expiredLink?: boolean; callbackFailure?: boolean; apiUnauthorized?: boolean; guestDisabled?: boolean } = {}) {
+async function mockServices(page: Page, options: { expiredLink?: boolean; callbackFailure?: boolean; apiUnauthorized?: boolean; guestDisabled?: boolean; emailConflict?: boolean; passwordFailure?: boolean; guestHistory?: boolean } = {}) {
   const calls: { path: string; body: Record<string, unknown> | null; authorization?: string }[] = []
-  const guestProblems: Record<string, unknown>[] = []
+  const guestProblems: Record<string, unknown>[] = options.guestHistory ? [{ number: 42, name: 'Guest history', difficulty: 'Medium', topic: 'Arrays', notes: 'Keep my notes', mastery_level: 'Partial Recall', next_review: '2026-10-04', attempts: 3, archived: false }] : []
+  let guestEmail = ''
+  let guestConfirmed = false
+  function guestSession() {
+    const result = session(guest)
+    result.user.email_confirmed_at = guestConfirmed ? '2026-10-02T00:00:00Z' : ''
+    result.user.email = guestConfirmed ? guestEmail : ''
+    result.user.is_anonymous = !guestConfirmed
+    result.access_token = `eyJhbGciOiJFUzI1NiJ9.${Buffer.from(JSON.stringify({ sub: guest, exp: result.expires_at, aud: 'authenticated', is_anonymous: !guestConfirmed })).toString('base64url')}.synthetic-signature`
+    return { ...result, user: { ...result.user, new_email: guestConfirmed ? '' : guestEmail } }
+  }
+  const authError = (code: string, msg: string) => ({ status: 422, headers: { 'x-supabase-api-version': '2024-01-01', 'access-control-expose-headers': 'X-Supabase-Api-Version' }, json: { code, msg } })
   await page.route('https://tracker-auth-test.supabase.co/**', async route => {
     const url = new URL(route.request().url())
     const body = route.request().postDataJSON()
@@ -28,13 +39,29 @@ async function mockServices(page: Page, options: { expiredLink?: boolean; callba
       if (options.callbackFailure && url.searchParams.get('grant_type') === 'pkce') {
         return route.fulfill({ status: 400, headers: { 'x-supabase-api-version': '2024-01-01', 'access-control-expose-headers': 'X-Supabase-Api-Version' }, json: { code: 'bad_code_verifier', msg: 'Code verifier mismatch' } })
       }
+      if (body?.auth_code === 'guest-confirmed') {
+        guestConfirmed = true
+        return route.fulfill({ json: guestSession() })
+      }
       if (body?.password === 'wrong-password') return route.fulfill({ status: 400, json: { code: 'invalid_credentials', msg: 'Invalid login credentials' } })
       const id = body?.refresh_token === `refresh-${guest}` ? guest : body?.email === 'bob@example.test' ? bob : alice
-      return route.fulfill({ json: session(id) })
+      return route.fulfill({ json: id === guest ? guestSession() : session(id) })
     }
     if (url.pathname.endsWith('/signup') && !body?.email) {
       if (options.guestDisabled) return route.fulfill({ status: 422, headers: { 'x-supabase-api-version': '2024-01-01', 'access-control-expose-headers': 'X-Supabase-Api-Version' }, json: { code: 'anonymous_provider_disabled', msg: 'Anonymous sign-ins are disabled' } })
-      return route.fulfill({ json: session(guest) })
+      return route.fulfill({ json: guestSession() })
+    }
+    if (url.pathname.endsWith('/user') && route.request().headers().authorization?.includes('.synthetic-signature')) {
+      const token = route.request().headers().authorization.split(' ')[1]
+      const id = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).sub
+      if (id === guest) {
+        if (body?.email) {
+          if (options.emailConflict) return route.fulfill(authError('email_exists', 'Email already exists'))
+          guestEmail = String(body.email)
+        }
+        if (body?.password && options.passwordFailure) return route.fulfill(authError('weak_password', 'Password is too weak'))
+        return route.fulfill({ json: guestSession().user })
+      }
     }
     if (url.pathname.endsWith('/signup') || url.pathname.endsWith('/user')) return route.fulfill({ json: session().user })
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204 })
@@ -362,4 +389,124 @@ test('sample preview fits mobile viewport and keeps guest entry visible', async 
   await expect(page.getByText(/Your progress is saved for this browser/)).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
   await page.screenshot({ path: test.info().outputPath('guest-mobile.png') })
+})
+
+async function startUpgrade(page: Page) {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Guest', exact: true }).click()
+  await page.getByRole('button', { name: 'Guest', exact: true }).click()
+  await page.getByRole('button', { name: 'Create account', exact: true }).click()
+  await page.getByLabel('Email', { exact: true }).fill('new-guest@example.test')
+  await page.getByRole('button', { name: 'Send confirmation link' }).click()
+  await expect(page.getByRole('status').or(page.getByRole('alert'))).toContainText(/Check your email|already belongs to an account/)
+}
+
+test('guest upgrade confirms email before password and preserves the owner and history after reload and sign-in', async ({ page }) => {
+  const calls = await mockServices(page, { guestHistory: true })
+  await startUpgrade(page)
+  await expect(page.getByRole('status')).toContainText('Check your email')
+  await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0)
+  expect(calls.filter(call => call.path === '/auth/v1/signup')).toHaveLength(1)
+  expect(calls.find(call => call.path.startsWith('/auth/v1/user?'))?.body).toEqual({ email: 'new-guest@example.test', code_challenge: expect.any(String), code_challenge_method: 's256' })
+  await page.reload()
+  await expect(page.getByRole('status')).toContainText('Waiting for email confirmation')
+  await page.getByRole('button', { name: 'Check confirmation' }).click()
+  await expect(page.getByRole('status')).toContainText('not confirmed yet')
+  await page.goto('/?code=guest-confirmed')
+  await expect(page.getByRole('heading', { name: 'Choose your password' })).toBeVisible()
+  await expect(page).not.toHaveURL(/code=/)
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Choose your password' })).toBeVisible()
+  await page.getByLabel('Password', { exact: true }).fill('new-password')
+  await page.getByLabel('Confirm password', { exact: true }).fill('different-password')
+  await page.getByRole('button', { name: 'Save password' }).click()
+  await expect(page.getByRole('alert')).toContainText('do not match')
+  expect(calls.some(call => call.path === '/auth/v1/user' && call.body?.password)).toBeFalsy()
+  await page.getByLabel('Confirm password', { exact: true }).fill('new-password')
+  await page.getByRole('button', { name: 'Save password' }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '3', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Show notes' }).click()
+  await expect(page.getByText('Keep my notes', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Guest', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Finish account setup' })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  const apiCalls = calls.filter(call => call.path.startsWith('/api'))
+  expect(apiCalls.every(call => call.body === null && JSON.parse(Buffer.from(call.authorization!.split('.')[1], 'base64url').toString()).sub === guest)).toBeTruthy()
+  expect(calls.filter(call => call.path === '/auth/v1/user' && call.body?.password)).toHaveLength(1)
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click()
+  // The real provider would return the same UUID for the attached email.
+  await page.route('**/auth/v1/token?grant_type=password', route => route.fulfill({ json: { ...session(guest), user: { ...session(guest).user, is_anonymous: false, email: 'new-guest@example.test' } } }))
+  await signIn(page, 'new-guest@example.test', 'new-password')
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+})
+
+test('existing email conflict keeps guest access and never signs into or merges another account', async ({ page }) => {
+  const calls = await mockServices(page, { emailConflict: true, guestHistory: true })
+  await startUpgrade(page)
+  await expect(page.getByRole('alert')).toContainText('already belongs to an account')
+  await page.getByRole('button', { name: 'Back to workspace' }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  expect(calls.some(call => call.path.includes('grant_type=password'))).toBeFalsy()
+  expect(calls.filter(call => call.path.startsWith('/api')).every(call => call.body === null)).toBeTruthy()
+})
+
+test('failed guest confirmation retains session and supports retry without sign-in guidance', async ({ page }) => {
+  const calls = await mockServices(page, { callbackFailure: true, guestHistory: true })
+  await startUpgrade(page)
+  await page.goto('/?code=unexchangeable')
+  await expect(page.getByRole('alert')).toContainText('Your guest progress is still saved')
+  await expect(page.getByRole('alert')).not.toContainText('email and password')
+  await page.getByRole('button', { name: 'Back to workspace' }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Guest', exact: true }).click()
+  await page.getByRole('button', { name: 'Finish account setup' }).click()
+  await expect(page.getByRole('heading', { name: 'Keep your guest progress' })).toBeVisible()
+  expect(calls.filter(call => call.path === '/auth/v1/signup')).toHaveLength(1)
+})
+
+test('failed password save can resume after reload without losing progress', async ({ page }) => {
+  await mockServices(page, { passwordFailure: true, guestHistory: true })
+  await startUpgrade(page)
+  await page.goto('/?code=guest-confirmed')
+  await page.getByLabel('Password', { exact: true }).fill('new-password')
+  await page.getByLabel('Confirm password', { exact: true }).fill('new-password')
+  await page.getByRole('button', { name: 'Save password' }).click()
+  await expect(page.getByRole('alert')).toContainText('too weak')
+  await page.getByRole('button', { name: 'Back to workspace' }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Finish account setup' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Choose your password' })).toBeVisible()
+})
+
+test('upgrade marker for a different owner does not prompt a permanent account to change its password', async ({ page }) => {
+  await mockServices(page)
+  await page.addInitScript(value => {
+    localStorage.setItem('sb-tracker-auth-test-auth-token', JSON.stringify(value))
+    localStorage.setItem('tracker-guest-upgrade-user', '33333333-3333-4333-8333-333333333333')
+  }, session(alice))
+  await page.goto('/')
+  await expect(page.getByText('Alice problem', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Finish account setup' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Choose your password' })).toHaveCount(0)
+})
+
+test('mobile upgrade form fits and returning before submission leaves the guest unchanged', async ({ page }) => {
+  const calls = await mockServices(page, { guestHistory: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Guest', exact: true }).click()
+  await openSignIn(page)
+  await page.getByRole('button', { name: 'Create account', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Keep your guest progress' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
+  await page.screenshot({ path: test.info().outputPath('upgrade-mobile.png') })
+  await page.getByRole('button', { name: 'Back to workspace' }).click()
+  await expect(page.getByText('Guest history', { exact: true })).toBeVisible()
+  expect(calls.some(call => call.path.startsWith('/auth/v1/user'))).toBeFalsy()
 })

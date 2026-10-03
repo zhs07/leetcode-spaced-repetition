@@ -199,8 +199,9 @@ The hosted landing flow now works as follows:
    own UUIDs and use the same ownership predicates as permanent accounts.
 4. **Sign in** opens the existing account form. Guests can go back without
    replacing their session. The form explains that successful account sign-in
-   replaces guest access and does not transfer guest records. Guest-to-account
-   identity linking or merging has not been implemented.
+   replaces guest access and does not transfer guest records. **Create account**,
+   available in the Guest details and sign-in form, instead starts the same-user
+   email upgrade described below. Existing-account merging is not implemented.
 
 Clearing browser data, losing the session, or signing into another account can
 lose access to the guest collection. No cross-device recovery is promised.
@@ -294,6 +295,69 @@ Each guest gets a verified UUID, so avoiding an email form doesn't mean sharing
 data. I separated sample content from saved records, tested isolation and session
 restoration, and made the session-loss tradeoff clear. Public launch also needs
 abuse controls and cleanup to keep resource use within the free allowance."
+
+### Retaining guest progress when creating a new account
+
+Implemented locally October 2; **real email upgrade verification is pending**.
+The current official [anonymous-account upgrade guide](https://supabase.com/docs/guides/auth/auth-anonymous#convert-an-anonymous-user-to-a-permanent-user)
+requires manual identity linking to be enabled, email verification first, then
+password creation. The implementation follows that order:
+
+1. A guest chooses **Create account** and enters a new email address.
+   `GuestUpgrade.tsx` calls `auth.updateUser({ email }, { emailRedirectTo })`
+   on the current guest. It does not call `signUp`, sign out, or move tracker rows.
+2. Supabase sends a confirmation link. Open it in the same browser and origin
+   that requested it, so the SDK can use its stored PKCE verifier. `auth.ts`
+   exchanges the callback code. Failed links retain the restored guest session
+   and give upgrade-specific retry guidance.
+3. Only a confirmed permanent user sees **Choose your password**. A new password
+   and matching confirmation call `auth.updateUser({ password })`. The app checks
+   the current user against the original UUID and refreshes the session before
+   and after this operation. Progress remains owned by that same UUID.
+4. A localStorage marker stores only the upgrading UUID, never a password or
+   an email. It resumes confirmation/password setup after reload and is cleared
+   after successful setup or an intentional account switch/sign-out. This is a
+   UI hint, not an authorization claim. It is ignored for another signed-in UUID.
+   **Back to workspace** preserves access while setup is unfinished; confirmed
+   users see **Finish account setup** until a password is successfully saved.
+5. An existing-email conflict stays in the guest session and explains using a
+   different email. There is no automatic sign-in, overwrite, or merge. Ordinary
+   **Sign in** still explains that guest progress does not transfer.
+
+No backend, migration, or ownership predicate was changed for this
+implementation. The live read-only baseline was one permanent owner with
+68 problems/68 reviews and two anonymous owners with one problem/one review in
+total. The retained guest browser at `http://127.0.0.1:5176/` showed Two Sum with
+one attempt and the October 4 review date before upgrade work.
+
+After explicit user approval on October 2, saved **Allow manual linking** as
+enabled and verified it remained enabled after reloading the dashboard.
+**Confirm email** remains enabled. Added exactly `http://127.0.0.1:5176/` to
+the redirect allowlist and verified the saved list contains three entries:
+the existing `http://127.0.0.1:5173/`, its recovery URL, and the guest origin.
+The Site URL remains `http://127.0.0.1:5173/`. No OAuth provider or paid feature
+was enabled. Visual proofs are saved outside the repository at
+`/private/tmp/leetcode-manual-linking-enabled-2026-10-02.jpg` and
+`/private/tmp/leetcode-guest-redirect-enabled-2026-10-02.jpg`.
+These provider prerequisites are ready; real email conversion remains pending.
+The user must supply an unused email that can receive provider mail and enter
+their own password. Default Supabase email delivery is restricted; the existing
+[SMTP requirements](#provider-configuration-still-required) still apply. Do not
+disable email confirmation or modify templates to work around delivery.
+
+Mocked verification: **26 auth/guest browser tests**, covering email-before-
+password order, same-owner API reads and preserved attempt/notes history,
+reload and later sign-in, email conflict without merge, failed confirmation,
+failed password save and resume, a marker belonging to another account, and
+mobile layout. Build, lint, **18 existing tracker browser tests** with disposable
+SQLite, and `git diff --check` passed. These auth tests use the real SDK with mocked
+provider/API responses; they do not prove live identity conversion or delivery.
+The live proof must compare UUID and problem/review contents before and after
+confirmation, password creation, reload, and a user-controlled later sign-in.
+The temporary servers were restarted on the same ports (5176/8002) and the
+retained real guest reloaded with the same Two Sum attempt and scheduled date.
+The new account form was inspected without submitting an email or changing
+the guest identity. No Git staging, commit, or push was performed.
 
 ## Preserved local version
 

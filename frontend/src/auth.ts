@@ -14,8 +14,13 @@ export const supabase = hosted && !authConfigurationError
   ? createClient(url, key, { auth: { flowType: 'pkce', detectSessionInUrl: false, persistSession: true, autoRefreshToken: true } })
   : null
 
-type AuthState = { session: Session | null; loading: boolean; recovering: boolean; error: string }
-let state: AuthState = { session: null, loading: hosted && !authConfigurationError, recovering: false, error: '' }
+// This marker only resumes the setup UI; it never grants access to records.
+const upgradeKey = 'tracker-guest-upgrade-user'
+function readUpgradeUser() {
+  try { return localStorage.getItem(upgradeKey) } catch { return null }
+}
+type AuthState = { session: Session | null; loading: boolean; recovering: boolean; error: string; upgradeUserId: string | null }
+let state: AuthState = { session: null, loading: hosted && !authConfigurationError, recovering: false, error: '', upgradeUserId: readUpgradeUser() }
 let epoch = 0
 const listeners = new Set<() => void>()
 function update(next: Partial<AuthState>) {
@@ -39,8 +44,31 @@ export function finishRecovery() {
 export function dismissAuthError() {
   update({ error: '' })
 }
+export function markGuestUpgrade(userId: string | null) {
+  // Persist before requesting the email, so a reload or email callback can resume.
+  if (userId) localStorage.setItem(upgradeKey, userId)
+  else localStorage.removeItem(upgradeKey)
+  update({ upgradeUserId: userId })
+}
+
+export async function refreshUpgradeUser(userId: string) {
+  if (!supabase) throw new Error('Sign-in is not configured.')
+  const { data, error } = await supabase.auth.getUser()
+  if (error) throw error
+  if (data.user.id !== userId || state.session?.user.id !== userId) throw new Error('Your account changed. Return to your workspace before continuing.')
+  const result = await supabase.auth.refreshSession()
+  if (result.error) throw result.error
+  if (result.data.session?.user.id !== userId) throw new Error('Could not refresh your account. Please reload and try again.')
+  update({ session: result.data.session })
+  return result.data.session.user
+}
 
 function emailLinkError(code: string | undefined, recovering: boolean) {
+  if (!recovering && state.upgradeUserId) {
+    return code === 'otp_expired' || code === 'flow_state_expired'
+      ? 'This confirmation link is invalid or expired. Your guest progress is still saved. Request another confirmation link from Create account.'
+      : "We couldn't finish confirming your email. Open the link in the same browser that requested it, or check confirmation from Create account. Your guest progress is still saved."
+  }
   const label = recovering ? 'password-reset link' : 'email link'
   if (code === 'otp_expired' || code === 'flow_state_expired') {
     return `This ${label} is invalid or expired. Please request a new one.`
@@ -83,6 +111,9 @@ if (supabase) {
         update({ session: data.session, recovering: !!data.session && params.get('auth') === 'recovery' })
       }
     } catch (error) {
+      // A failed confirmation must not discard a retained guest session.
+      const restored = await client.auth.getSession()
+      if (restored.data.session) update({ session: restored.data.session })
       update({ error: error instanceof Error ? error.message : 'Could not restore your session.' })
     } finally {
       initializing = false

@@ -47,10 +47,15 @@ workspace using the existing API. Sample action buttons also start a guest;
 filters and notes remain interactive in the sample view.
 
 Guest sessions return in the same browser until its session/storage is lost.
-Signing into a permanent account replaces the guest session without transferring
-records; the form explains this before submission. Guest sign-in is enabled and
+Signing into an existing permanent account replaces the guest session without
+transferring records; the form explains this before submission. Guests can instead
+choose Create account to attach a new email to their current UUID, confirm it,
+then set a password in `GuestUpgrade.tsx`. A UUID-only browser marker resumes
+unfinished setup after reload; ownership and API verification remain unchanged.
+Existing-email conflicts do not merge or switch accounts. Guest sign-in is enabled and
 real guest save/reload has been verified. Evidence, temporary verification server
-commands, and remaining public-launch abuse controls are in the deployment guide.
+commands, pending live upgrade/provider configuration, and remaining public-launch
+abuse controls are in the deployment guide.
 Account changes remount the tracker and clear
 its state; API requests attach the current access token and reject stale responses.
 
