@@ -161,6 +161,7 @@ export default function App({ preview = false, onStartGuest, accountControls, ac
   const [importOpen, setImportOpen] = useState(false)
   const [practiceOpen, setPracticeOpen] = useState(false)
   const [visibleNotes, setVisibleNotes] = useState<Set<number>>(new Set())
+  const [search, setSearch] = useState('')
   const [view, setView] = useState('all')
   const [topic, setTopic] = useState('')
   const [mastery, setMastery] = useState('')
@@ -168,8 +169,10 @@ export default function App({ preview = false, onStartGuest, accountControls, ac
   const [direction, setDirection] = useState('asc')
   const scopeProblems = problems.filter(problem => view === 'archived' ? problem.archived : !problem.archived)
   const topics = [...new Set(scopeProblems.map(problem => problem.topic))].sort((a, b) => a.localeCompare(b))
+  const query = search.trim().toLowerCase()
   const shownProblems = scopeProblems.filter(problem =>
     (view === 'all' || view === 'archived' || (view === 'due' ? problem.next_review !== null && problem.next_review <= today : problem.mastery_level === null)) &&
+    (!query || problem.name.toLowerCase().includes(query)) &&
     (!topic || problem.topic === topic) && (!mastery || problem.mastery_level === mastery)
   ).sort((a, b) => {
     const value = (problem: ProblemSummary): string | number | null => {
@@ -188,8 +191,8 @@ export default function App({ preview = false, onStartGuest, accountControls, ac
     const comparison = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right))
     return comparison * (direction === 'asc' ? 1 : -1) || a.number - b.number
   })
-  const hasFilters = view === 'due' || view === 'unreviewed' || topic || mastery
-  function clearFilters() { if (view !== 'archived') setView('all'); setTopic(''); setMastery('') }
+  const hasFilters = view === 'due' || view === 'unreviewed' || topic || mastery || query
+  function clearFilters() { setSearch(''); if (view !== 'archived') setView('all'); setTopic(''); setMastery('') }
   function changeView(nextView: string) {
     if ((view === 'archived') !== (nextView === 'archived')) { setTopic(''); setMastery('') }
     setView(nextView)
@@ -269,6 +272,9 @@ export default function App({ preview = false, onStartGuest, accountControls, ac
         <button className="text-button" onClick={() => { setNotice(''); setNoticeView(null); setActionError(''); void refresh() }} disabled={loading || archivePending !== null}>{loading ? 'Refreshing…' : 'Refresh'}</button>
       </div>
       <div className="border-b border-line bg-surface-soft px-6 py-4">
+        <label className="mb-4 block text-xs text-muted">Search problems
+          <input type="search" className="text-sm" placeholder="Search by title…" value={search} onChange={event => setSearch(event.target.value)} />
+        </label>
         <div className="filter-grid">
           <label className="text-xs text-muted">Show<select value={view} onChange={event => changeView(event.target.value)}><option value="all">Active problems</option><option value="due">Due & overdue</option><option value="unreviewed">Not reviewed</option><option value="archived">Archived</option></select></label>
           <label className="text-xs text-muted">Filter by topic<select value={topic} onChange={event => setTopic(event.target.value)}><option value="">All topics</option>{topics.map(item => <option key={item}>{item}</option>)}</select></label>
@@ -290,7 +296,7 @@ export default function App({ preview = false, onStartGuest, accountControls, ac
           <div className="empty-icon" aria-hidden="true">&lt;/&gt;</div><h3 className="text-xl font-semibold text-strong mt-5">A fresh start for your practice</h3>
           <p className="mt-2">Add a problem with your first attempt, or save it to practice later.</p>
           <button className="text-button mt-5" onClick={() => preview ? onStartGuest?.() : setEditor({ kind: 'problem' })}>Add your first problem →</button>
-        </div> : scopeProblems.length === 0 && !error ? <div className="empty-state"><h3 className="text-lg font-semibold text-strong">{view === 'archived' ? 'No archived problems' : 'Your active list is clear'}</h3><p className="mt-2">{view === 'archived' ? 'Problems you archive will appear here with their history.' : 'Your saved problems are archived. Restore one whenever you want to practice it again.'}</p><button className="text-button mt-4" onClick={() => changeView(view === 'archived' ? 'all' : 'archived')}>{view === 'archived' ? 'View active problems' : 'View archived'}</button></div> : scopeProblems.length > 0 && shownProblems.length === 0 ? <div className="empty-state"><h3 className="text-lg font-semibold text-strong">No matching problems</h3><p className="mt-2">Try another filter combination to see more of your list.</p><button className="text-button mt-4" onClick={clearFilters}>{view === 'archived' ? 'Show archived problems' : 'Show active problems'}</button></div> : scopeProblems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
+        </div> : scopeProblems.length === 0 && !error ? <div className="empty-state"><h3 className="text-lg font-semibold text-strong">{view === 'archived' ? 'No archived problems' : 'Your active list is clear'}</h3><p className="mt-2">{view === 'archived' ? 'Problems you archive will appear here with their history.' : 'Your saved problems are archived. Restore one whenever you want to practice it again.'}</p><button className="text-button mt-4" onClick={() => changeView(view === 'archived' ? 'all' : 'archived')}>{view === 'archived' ? 'View active problems' : 'View archived'}</button></div> : scopeProblems.length > 0 && shownProblems.length === 0 ? <div className="empty-state"><h3 className="text-lg font-semibold text-strong">No matching problems</h3><p className="mt-2">{query ? 'Try another title or adjust your filters.' : 'Try another filter combination to see more of your list.'}</p><button className="text-button mt-4" onClick={clearFilters}>{view === 'archived' ? 'Show archived problems' : 'Show active problems'}</button></div> : scopeProblems.length > 0 && <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Problems table; scroll horizontally on small screens">
           <table className="problems-table"><thead><tr>{['#', 'Problem', 'Difficulty', 'Topic', 'Mastery', 'Next review', 'Attempts', 'Notes', 'Actions'].map(title => <th key={title} scope="col">{title}</th>)}</tr></thead>
             <tbody>{shownProblems.map(problem => <Fragment key={problem.number}><tr>
               <td className="text-faint font-mono">{problem.number}</td><th scope="row" className="problem-name">{problem.name}</th>

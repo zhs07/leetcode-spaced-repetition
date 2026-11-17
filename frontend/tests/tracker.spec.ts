@@ -132,6 +132,16 @@ test('filters combine and all sort directions preserve missing values last', asy
   const rows = page.getByRole('rowheader')
   await expect(rows).toHaveText(['Beta', 'Gamma', 'Alpha', 'Delta'])
   const initialLoads = loads
+  const search = page.getByRole('searchbox', { name: 'Search problems' })
+  await search.fill('  Ta  ')
+  await expect(rows).toHaveText(['Beta', 'Delta'])
+  await page.getByRole('combobox', { name: 'Show', exact: true }).selectOption('due')
+  await expect(rows).toHaveText(['Beta'])
+  await search.fill('missing title')
+  await expect(page.getByText('No matching problems')).toBeVisible()
+  await page.getByRole('button', { name: 'Clear filters' }).click()
+  await expect(search).toHaveValue('')
+  await expect(rows).toHaveCount(4)
   for (const [sort, asc, desc] of [
     ['next_review', ['Beta', 'Gamma', 'Alpha', 'Delta'], ['Alpha', 'Gamma', 'Beta', 'Delta']],
     ['mastery', ['Beta', 'Gamma', 'Alpha', 'Delta'], ['Alpha', 'Gamma', 'Beta', 'Delta']],
